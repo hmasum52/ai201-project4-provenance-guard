@@ -112,6 +112,28 @@ def log_rejection(creator_id: str, reason: str, **extra) -> dict:
     })
 
 
+def log_verification(creator_id: str, passed: bool, combined_score: float) -> dict:
+    """
+    Record a verified-human attempt. A passing attempt is the credential:
+    `is_verified` looks for it, so there is no separate store to keep in sync.
+    """
+    return _append({
+        "timestamp": _now(),
+        "creator_id": creator_id,
+        "event": "verified" if passed else "verification_failed",
+        "combined_score": combined_score,
+        "status": "verified" if passed else "not_verified",
+    })
+
+
+def is_verified(creator_id: str) -> bool:
+    """Has this creator ever passed the writing challenge?"""
+    return any(
+        e.get("event") == "verified" and e.get("creator_id") == creator_id
+        for e in read_entries()
+    )
+
+
 def _append(entry: dict) -> dict:
     config.LOG_DIR.mkdir(parents=True, exist_ok=True)
     line = json.dumps(entry, ensure_ascii=False)

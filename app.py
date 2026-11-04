@@ -257,6 +257,7 @@ def submit():
         "model_score": model_score,
         "style_score": style_score,
         "phrase_score": phrase_score,
+        "verified_human": audit.is_verified(creator_id),
     })
 
 
@@ -308,6 +309,60 @@ def appeal():
     })
 
 
+@app.get("/verify")
+def verify_prompt():
+    """The prompt a writer answers to earn the verified-human credential."""
+    return jsonify({"prompt": config.VERIFY_PROMPT, "min_words": config.VERIFY_MIN_WORDS})
+
+
+@app.post("/verify")
+def verify():
+    """
+    Earn the verified-human credential: answer the prompt with a writing sample.
+
+    The sample goes through the same scoring as /submit; only a "human" result
+    earns the credential. Limits: creator_id is unauthenticated, the challenge
+    isn't timed, and AI text that happens to score human would pass.
+    """
+    import detector
+
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        payload = {}
+    sample = payload.get("sample")
+    creator_id = payload.get("creator_id")
+
+    def bad(message):
+        return jsonify({"error": "bad_input", "message": message}), 400
+
+    if not isinstance(creator_id, str) or not creator_id.strip():
+        return bad("Send a creator_id.")
+    if not isinstance(sample, str) or len(sample.split()) < config.VERIFY_MIN_WORDS:
+        return bad(f"Write at least {config.VERIFY_MIN_WORDS} words answering the prompt.")
+    if len(sample) > MAX_TEXT_CHARS:
+        return bad(f"Sample is over {MAX_TEXT_CHARS} characters.")
+
+    try:
+        model_score = detector.model_signal(sample)
+    except detector.DetectorUnavailable as exc:
+        return jsonify({"error": "detector_unavailable", "message": str(exc)}), 503
+
+    combined = scoring.combine_signals(
+        model_score, stylometry.style_signal(sample), phrases.phrase_signal(sample)
+    )
+    passed = scoring.score_to_label(combined)[0] == "human"
+    audit.log_verification(creator_id, passed, combined)
+    return jsonify({
+        "creator_id": creator_id,
+        "verified": passed,
+        "message": (
+            "You're verified. Your work will show a verified-human mark."
+            if passed else
+            "We couldn't verify this sample. You can try again with a longer, more personal answer."
+        ),
+    })
+
+
 @app.get("/content/<content_id>")
 def get_content(content_id):
     """One item's current status, read from the audit log."""
@@ -327,6 +382,7 @@ def get_content(content_id):
         "combined_score": decision.get("combined_score"),
         "status": entries[-1].get("status"),
         "appealed": any(e.get("event") == "appeal" for e in entries),
+        "verified_human": audit.is_verified(decision.get("creator_id")),
     })
 
 

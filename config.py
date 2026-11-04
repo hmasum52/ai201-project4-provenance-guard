@@ -94,6 +94,14 @@ AI_THRESHOLD = 0.60    # lowered from 0.65: clearly-AI test text scored 0.640
 # prints the bands; the reachable range is a different question.
 
 
+# ─── Verified-human path (stretch) ───────────────────────────────────────────
+# A writer answers this prompt with a sample; if it scores "human" they earn a
+# credential shown on their work.
+
+VERIFY_PROMPT = "Describe a small, specific moment from this week that stuck with you, in your own words."
+VERIFY_MIN_WORDS = 60
+
+
 # ─── Rate limiting (UNIT 8) ──────────────────────────────────────────────────
 # Off in unit 7. You turn it on and choose the numbers in unit 8, Milestone 1.
 #
