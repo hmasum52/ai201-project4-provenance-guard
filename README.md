@@ -221,6 +221,16 @@ $ curl "http://127.0.0.1:5000/log?limit=3"
 - *What came back:*
 - *What I changed:*
 
+---
+
+## Stretch Features
+
+Declared before building. I'm adding all three:
+
+1. **`GET /content/<id>`**: returns one item's current status, label and whether it was appealed.
+2. **A third signal**: a stock-phrase signal (`phrases.py`) that counts filler phrases AI text leans on ("it is important to note", "furthermore"). It can only push a score toward AI, never toward human, because a missing phrase proves nothing. Weighting note to follow.
+3. **A verified-human path**: `POST /verify`. A writer answers a prompt with a writing sample; if it scores human they earn a credential that shows as `verified_human` on their work. It does not override the label.
+
 <!-- ═══════════════════════ UNIT 8 — THE TEST ═══════════════════════ -->
 
 ---
