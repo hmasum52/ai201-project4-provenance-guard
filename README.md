@@ -80,9 +80,9 @@
 <!-- Write the rule in words, then give the numbers. What happens when the two
      signals disagree? -->
 
-**The rule:**
+**The rule:** a weighted average that leans on the model signal, with a safety valve. If the two signals disagree by a lot, the result is pulled halfway back toward 0.5 ("unsure"), so a split between signals never turns into an accusation.
 
-**The numbers:**
+**The numbers:** `combined = 0.6 × model_score + 0.4 × style_score`. If `|model_score − style_score| > 0.4`, then `combined = 0.5 + (combined − 0.5) / 2`. Weights and the 0.4 gap are in `config.py` (`WEIGHT_MODEL_SIGNAL`, `WEIGHT_STYLE_SIGNAL`, `DISAGREEMENT_GAP`). The style signal averages three measures with equal weight: sentence-length spread, type-token ratio and punctuation density, each flipped so higher means more AI.
 
 **Where it lives:** `scoring.py::combine_signals`
 
@@ -90,6 +90,17 @@
      somewhere else, say where. -->
 
 **A case where my two signals split, and what my rule does with it:**
+
+A lightly-edited AI paragraph ("Honestly, it's pretty important to note that good communication matters a lot in any company. Also, teams do better when people share ideas openly, so you should try it. ... Anyway, that's my take."). The model signal still suspects AI (`model_score` 0.567), but the casual short sentences and added commas fool the style signal (`style_score` 0.149). The plain average would be 0.400; because the signals are 0.418 apart, the rule pulls it halfway toward 0.5 and returns `combined_score` 0.450. That lands in "unsure" rather than being called human. Four test inputs, direct scores:
+
+| Input | model | style | combined |
+|---|---|---|---|
+| clearly AI | 0.761 | 0.459 | 0.640 |
+| clearly human | 0.419 | 0.179 | 0.323 |
+| formal human | 0.297 | 0.153 | 0.239 |
+| lightly-edited AI | 0.567 | 0.149 | 0.450 |
+
+The clearly-AI and clearly-human texts sit 0.32 apart. Note that "clearly AI" scores 0.640, just under the 0.65 AI threshold, so the AI label may need a threshold or weight change in Milestone 5.
 
 
 
