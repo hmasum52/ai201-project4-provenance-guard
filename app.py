@@ -30,6 +30,7 @@ from flask import Flask, jsonify, request
 
 import audit
 import config
+import phrases
 import scoring
 import stylometry
 
@@ -233,7 +234,8 @@ def submit():
         return jsonify({"error": "detector_unavailable", "message": str(exc)}), 503
 
     style_score = stylometry.style_signal(text)
-    combined = scoring.combine_signals(model_score, style_score)
+    phrase_score = phrases.phrase_signal(text)
+    combined = scoring.combine_signals(model_score, style_score, phrase_score)
 
     content_id = str(uuid.uuid4())
     guess, label = scoring.score_to_label(combined)
@@ -245,6 +247,7 @@ def submit():
         style_score=style_score,
         combined_score=combined,
         label=label,
+        phrase_score=phrase_score,
     )
     return jsonify({
         "content_id": content_id,
@@ -253,6 +256,7 @@ def submit():
         "label": label,
         "model_score": model_score,
         "style_score": style_score,
+        "phrase_score": phrase_score,
     })
 
 

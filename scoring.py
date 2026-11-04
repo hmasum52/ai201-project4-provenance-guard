@@ -19,7 +19,9 @@ you claim, so that line should read `scoring.py::combine_signals`.
 import config
 
 
-def combine_signals(model_score: float, style_score: float) -> float:
+def combine_signals(
+    model_score: float, style_score: float, phrase_score: float = 0.0
+) -> float:
     """
     Combine two 0–1 signals into one 0–1 score. ← TODO (Milestone 4)
 
@@ -61,6 +63,8 @@ def combine_signals(model_score: float, style_score: float) -> float:
     )
     if abs(model_score - style_score) > config.DISAGREEMENT_GAP:
         score = 0.5 + (score - 0.5) / 2
+    # Stock phrases only add suspicion; their absence proves nothing.
+    score += config.WEIGHT_PHRASE * phrase_score
     return round(min(max(score, 0.0), 1.0), 4)
 
 

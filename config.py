@@ -57,6 +57,11 @@ DETECTOR_MAX_TOKENS = 400
 WEIGHT_MODEL_SIGNAL = 0.6
 WEIGHT_STYLE_SIGNAL = 0.4
 
+# The stock-phrase signal (phrases.py) can only add suspicion: this much of its
+# score is added on top of the weighted average, capped at 1.0. No phrases
+# proves nothing, so it never pulls a score toward human.
+WEIGHT_PHRASE = 0.15
+
 # If the two signals differ by more than this, the combined score is pulled
 # halfway back toward 0.5 ("unsure"), so a split never becomes an accusation.
 DISAGREEMENT_GAP = 0.4
