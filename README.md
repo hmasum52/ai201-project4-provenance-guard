@@ -39,6 +39,14 @@
 <!-- The path a submission takes, from arriving to the label a reader sees.
      Six or seven steps — this is the trace you wrote in Milestone 1. -->
 
+1. **The route (`POST /submit`)** receives `{text, creator_id}`, rejects missing, empty, too-short or enormous text with a 400, and assigns a `content_id`.
+2. **The rate limiter** (unit 8) sits in front of the route and turns excess requests into a 429, which is also logged.
+3. **Signal one (`detector.model_signal`)** runs gpt2 on the text and adds `model_score`, a 0–1 predictability score.
+4. **Signal two (`stylometry.style_signal`)** measures sentence-length spread, vocabulary repetition and punctuation, and adds `style_score`.
+5. **The combining rule (`scoring.combine_signals`)** merges the two scores into one `combined_score`.
+6. **The label mapping (`scoring.score_to_label`)** turns that score into a guess (`human`, `unsure` or `ai`) and the sentence a reader sees.
+7. **The audit log (`audit.log_decision`)** records all of it, then the response goes back. A later `POST /appeal` moves the item to `under_review`.
+
 
 
 ---
@@ -53,19 +61,19 @@
 
 ### Signal one — the model signal
 
-**What it measures:**
+**What it measures:** how predictable the text is to a local language model (gpt2), as perplexity squashed onto 0–1.
 
-**Why that might differ between human and AI writing:**
+**Why that might differ between human and AI writing:** a model writes by picking likely next words, so its text is easy for another model to predict. Human writing has odder word choices and more surprises.
 
-**What it can't see:**
+**What it can't see:** who wrote it. It rewards common words in short, ordinary sentences, so plain human writing (a second-language writer, a younger writer, anyone writing simply on purpose) scores as AI. Ornate prose full of rare words scores as human, whoever wrote it.
 
 ### Signal two — the style signal
 
-**What it measures:**
+**What it measures:** the shape of the text: how much sentence length varies, how much vocabulary repeats, and how much punctuation there is.
 
-**Why that might differ between human and AI writing:**
+**Why that might differ between human and AI writing:** generated prose leans toward even, mid-length sentences and a narrower vocabulary. Human writing is lumpier, with a three-word sentence beside a forty-word one.
 
-**What it can't see:**
+**What it can't see:** meaning. It cannot read, so anything that changes the shape without changing the substance moves it: added typos, broken-up sentences, a pasted quotation. Type-token ratio also falls as text gets longer, so text length alone can look like a signal.
 
 ### The combining rule
 
