@@ -228,8 +228,43 @@ $ curl "http://127.0.0.1:5000/log?limit=3"
 Declared before building. I'm adding all three:
 
 1. **`GET /content/<id>`**: returns one item's current status, label and whether it was appealed.
-2. **A third signal**: a stock-phrase signal (`phrases.py`) that counts filler phrases AI text leans on ("it is important to note", "furthermore"). It can only push a score toward AI, never toward human, because a missing phrase proves nothing. Weighting note to follow.
+2. **A third signal**: a stock-phrase signal (`phrases.py`) that counts filler phrases AI text leans on ("it is important to note", "furthermore"). It can only push a score toward AI, never toward human, because a missing phrase proves nothing. Weighting note below.
 3. **A verified-human path**: `POST /verify`. A writer answers a prompt with a writing sample; if it scores human they earn a credential that shows as `verified_human` on their work. It does not override the label.
+
+### How I weighted the three signals
+
+`combined = 0.6 × model + 0.4 × style` (with the disagreement pull toward 0.5 from before), then `+ 0.15 × phrase_score`, capped at 1.0 (`config.WEIGHT_PHRASE`, in `scoring.py::combine_signals`). The phrase signal is added on top rather than averaged in because a text with no stock phrases proves nothing, so it must never drag an AI text toward human.
+
+Effect on the four test inputs (combined, before → after): clearly AI 0.640 → 0.790, clearly human 0.323 → 0.323, formal human 0.239 → 0.239, lightly-edited AI 0.450 → 0.450. The AI/human gap grew from 0.32 to 0.47. The edited AI text didn't move: casual rewriting stripped every stock phrase, which is this signal's blind spot (a word list is easy to avoid). The risk runs the other way too: a formal human writer who says "furthermore" gets nudged toward AI.
+
+### `GET /content/<id>`
+
+Reads the audit log and returns `content_id`, `creator_id`, `guess`, `label`, `combined_score`, `status` (`decided` or `under_review`), `appealed` and `verified_human`. An unknown id returns 404.
+
+### Verified-human path
+
+`GET /verify` returns the prompt and the 60-word minimum. `POST /verify` with `{creator_id, sample}` scores the sample through the same pipeline; only a "human" result (combined score 0.35 or below) earns the credential, which lives in the audit log as a `verified` event. `/submit` and `/content/<id>` then show `verified_human: true`. It does not change the label: a verified writer scored as AI still sees the AI label and can appeal.
+
+What happened in my run: the 60-word minimum rejected a short sample (400); an AI-style sample failed; my first plain human paragraph also **failed** (combined 0.443, "unsure"), and a second, more idiosyncratic one passed (0.157). I did not loosen the bar to make the first one pass. That failure is the same weakness as the false positive: plain, predictable writers are the least likely to verify.
+
+Limits: `creator_id` is unauthenticated, so anyone could claim another writer's id; the challenge isn't timed; and AI text that happens to score human would pass.
+
+```json
+{"creator_id": "writer-a", "verified": true, "message": "You're verified. Your work will show a verified-human mark."}
+```
+
+```json
+{
+    "appealed": false,
+    "combined_score": 0.7665,
+    "content_id": "af29d99b-43e2-4958-a851-76c356c02c91",
+    "creator_id": "writer-a",
+    "guess": "ai",
+    "label": "This looks like it was written by an AI. If you wrote it yourself, you can appeal and a person will review it.",
+    "status": "decided",
+    "verified_human": true
+}
+```
 
 <!-- ═══════════════════════ UNIT 8 — THE TEST ═══════════════════════ -->
 
