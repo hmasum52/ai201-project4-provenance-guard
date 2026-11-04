@@ -100,7 +100,7 @@ A lightly-edited AI paragraph ("Honestly, it's pretty important to note that goo
 | formal human | 0.297 | 0.153 | 0.239 |
 | lightly-edited AI | 0.567 | 0.149 | 0.450 |
 
-The clearly-AI and clearly-human texts sit 0.32 apart. Note that "clearly AI" scores 0.640, just under the 0.65 AI threshold, so the AI label may need a threshold or weight change in Milestone 5.
+The clearly-AI and clearly-human texts sit 0.32 apart. "Clearly AI" scored 0.640, just under my first AI threshold of 0.65, so that label was unreachable on it. In Milestone 5 I lowered `AI_THRESHOLD` to 0.60 (in `config.py`). The cost: a few more borderline texts, including plain human writing, will now cross into the AI label. The unsure band shrank from 0.35–0.65 to 0.35–0.60, so I'm trading some protection for writers for a reachable AI label.
 
 
 
@@ -115,14 +115,13 @@ The clearly-AI and clearly-human texts sit 0.32 apart. Note that "clearly AI" sc
 
 | Label | Score range | The exact text a reader sees |
 |---|---|---|
-| high-confidence human |  |  |
-| unsure |  |  |
-| high-confidence AI |  |  |
+| high-confidence human | 0.00 – 0.35 | We think this was probably written by a person. |
+| unsure | 0.35 – 0.60 | We can't tell whether a person or an AI wrote this. If it's yours, you can appeal and ask a person to look. |
+| high-confidence AI | 0.60 – 1.00 | This looks like it was written by an AI. If you wrote it yourself, you can appeal and a person will review it. |
 
-**Why I worded the "unsure" one this way:**
-<!-- It's the hardest of the three. It has to admit uncertainty without
-     sounding like an accusation, because the person reading it may well have
-     written every word themselves. -->
+**Why I worded the "unsure" one this way:** It says "we can't tell" rather than "this might be AI", so the system admits its own limit instead of putting suspicion on the writer. It never says "you". It ends with a next step, the appeal, because the person reading it may have written every word themselves. The AI label keeps the appeal pointer for the same reason.
+
+All three labels are reachable. Real submissions produced human (0.323), unsure (0.450) and AI (0.640).
 
 
 
@@ -143,32 +142,34 @@ The clearly-AI and clearly-human texts sit 0.32 apart. Note that "clearly AI" sc
 ```bash
 $ curl -X POST http://127.0.0.1:5000/submit \
   -H "Content-Type: application/json" \
-  -d '{"text": "In conclusion, it is important to note that effective communication plays a crucial role in the success of any organization. Furthermore, it is essential to foster a collaborative environment where team members can share ideas openly.", "creator_id": "demo-writer"}'
+  -d '{"text": "Honestly, it's pretty important to note that good communication matters a lot in any company. Also, teams do better when people share ideas openly, so you should try it. Modern tools help too, and they make work go faster, mostly. Anyway, that's my take.", "creator_id": "demo-writer"}'
 ```
 
 ```json
 {
-    "confidence": 0.8497,
-    "content_id": "a6ea1c8d-0c09-4cef-83c1-c0238f4445d9",
-    "guess": "ai",
-    "label": "placeholder",
-    "model_score": 0.8497,
-    "style_score": null
+    "confidence": 0.5502,
+    "content_id": "01a9ea4b-225b-4bff-a58e-a50dbeee8294",
+    "guess": "unsure",
+    "label": "We can't tell whether a person or an AI wrote this. If it's yours, you can appeal and ask a person to look.",
+    "model_score": 0.5668,
+    "style_score": 0.1486
 }
 ```
-
-*(Milestone 3 state: only the model signal is wired, so `style_score` is null and `label` is a placeholder until Milestones 4 and 5.)*
 
 **An appeal**
 
 ```bash
 $ curl -X POST http://127.0.0.1:5000/appeal \
   -H "Content-Type: application/json" \
-  -d '{"content_id": "...", "reasoning": "..."}'
+  -d '{"content_id": "01a9ea4b-225b-4bff-a58e-a50dbeee8294", "reasoning": "I wrote this myself; it is just how I talk when I write casually."}'
 ```
 
 ```json
-
+{
+    "content_id": "01a9ea4b-225b-4bff-a58e-a50dbeee8294",
+    "message": "Thanks. Your appeal is recorded and a person will review it.",
+    "status": "under_review"
+}
 ```
 
 **What the log shows afterwards**
@@ -182,26 +183,23 @@ $ curl "http://127.0.0.1:5000/log?limit=3"
     "count": 2,
     "entries": [
         {
-            "combined_score": null,
-            "content_id": "a6ea1c8d-0c09-4cef-83c1-c0238f4445d9",
+            "combined_score": 0.4498,
+            "content_id": "01a9ea4b-225b-4bff-a58e-a50dbeee8294",
             "creator_id": "demo-writer",
-            "guess": "ai",
-            "label": "placeholder",
-            "model_score": 0.8497,
+            "guess": "unsure",
+            "label": "We can't tell whether a person or an AI wrote this. If it's yours, you can appeal and ask a person to look.",
+            "model_score": 0.5668,
             "status": "decided",
-            "style_score": null,
-            "timestamp": "2026-11-04T06:37:43+00:00"
+            "style_score": 0.1486,
+            "timestamp": "2026-11-04T06:46:30+00:00"
         },
         {
-            "combined_score": null,
-            "content_id": "efb25dc8-7d08-49f1-b4b2-65a216d5942b",
+            "content_id": "01a9ea4b-225b-4bff-a58e-a50dbeee8294",
             "creator_id": "demo-writer",
-            "guess": "human",
-            "label": "placeholder",
-            "model_score": 0.3317,
-            "status": "decided",
-            "style_score": null,
-            "timestamp": "2026-11-04T06:37:45+00:00"
+            "event": "appeal",
+            "reasoning": "I wrote this myself; it is just how I talk when I write casually.",
+            "status": "under_review",
+            "timestamp": "2026-11-04T06:46:30+00:00"
         }
     ]
 }
