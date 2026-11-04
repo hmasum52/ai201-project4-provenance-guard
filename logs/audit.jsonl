@@ -1,0 +1,2 @@
+{"timestamp": "2026-11-04T06:37:43+00:00", "content_id": "a6ea1c8d-0c09-4cef-83c1-c0238f4445d9", "creator_id": "demo-writer", "guess": "ai", "model_score": 0.8497, "style_score": null, "combined_score": null, "label": "placeholder", "status": "decided"}
+{"timestamp": "2026-11-04T06:37:45+00:00", "content_id": "efb25dc8-7d08-49f1-b4b2-65a216d5942b", "creator_id": "demo-writer", "guess": "human", "model_score": 0.3317, "style_score": null, "combined_score": null, "label": "placeholder", "status": "decided"}

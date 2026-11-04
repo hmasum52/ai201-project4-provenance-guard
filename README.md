@@ -132,12 +132,21 @@
 ```bash
 $ curl -X POST http://127.0.0.1:5000/submit \
   -H "Content-Type: application/json" \
-  -d '{"text": "...", "creator_id": "..."}'
+  -d '{"text": "In conclusion, it is important to note that effective communication plays a crucial role in the success of any organization. Furthermore, it is essential to foster a collaborative environment where team members can share ideas openly.", "creator_id": "demo-writer"}'
 ```
 
 ```json
-
+{
+    "confidence": 0.8497,
+    "content_id": "a6ea1c8d-0c09-4cef-83c1-c0238f4445d9",
+    "guess": "ai",
+    "label": "placeholder",
+    "model_score": 0.8497,
+    "style_score": null
+}
 ```
+
+*(Milestone 3 state: only the model signal is wired, so `style_score` is null and `label` is a placeholder until Milestones 4 and 5.)*
 
 **An appeal**
 
@@ -158,7 +167,33 @@ $ curl "http://127.0.0.1:5000/log?limit=3"
 ```
 
 ```json
-
+{
+    "count": 2,
+    "entries": [
+        {
+            "combined_score": null,
+            "content_id": "a6ea1c8d-0c09-4cef-83c1-c0238f4445d9",
+            "creator_id": "demo-writer",
+            "guess": "ai",
+            "label": "placeholder",
+            "model_score": 0.8497,
+            "status": "decided",
+            "style_score": null,
+            "timestamp": "2026-11-04T06:37:43+00:00"
+        },
+        {
+            "combined_score": null,
+            "content_id": "efb25dc8-7d08-49f1-b4b2-65a216d5942b",
+            "creator_id": "demo-writer",
+            "guess": "human",
+            "label": "placeholder",
+            "model_score": 0.3317,
+            "status": "decided",
+            "style_score": null,
+            "timestamp": "2026-11-04T06:37:45+00:00"
+        }
+    ]
+}
 ```
 
 ---
