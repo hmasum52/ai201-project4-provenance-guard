@@ -209,17 +209,17 @@ $ curl "http://127.0.0.1:5000/log?limit=3"
 
 ## How I Used AI
 
-**Moment 1**
+**Moment 1: the combining rule (plan, analysis, then implementation)**
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+- *What I asked for:* A plan for Milestone 4 before any code, with questions first. We settled the rule on paper: all three style measures, then `0.6 × model + 0.4 × style`, pulled halfway toward 0.5 whenever the two signals differ by more than 0.4, so a split reads "unsure" instead of an accusation.
+- *What came back:* The implementation, and an analysis on four inputs with both signals printed: clearly AI 0.640, clearly human 0.323, formal human 0.239, lightly-edited AI 0.450. The edited-AI text was the split case (model 0.567, style 0.149) and the rule pulled it to "unsure" as planned.
+- *What I changed:* The analysis showed "clearly AI" sitting just under my 0.65 AI threshold, so that label was unreachable on it. In Milestone 5 I lowered `AI_THRESHOLD` to 0.60 and wrote down the cost in the README: a few more plain human writers can now cross into the AI label.
 
-**Moment 2**
+**Moment 2: the verified-human path (plan, analysis, then implementation)**
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+- *What I asked for:* A plan for a stretch feature where a writer earns a credential through an extra step. It asked how the credential should be earned, and I chose a writing challenge scored by my own pipeline.
+- *What came back:* A `POST /verify` endpoint. Testing it was the analysis: a short sample was rejected (400), an AI-style sample failed, and my first plain human paragraph also failed (combined 0.443, "unsure"). A more distinctive human paragraph passed (0.157).
+- *What I changed:* Nothing in the threshold. I kept the strict bar and kept the failed attempt in the write-up, because it is the same weakness as the false positive: plain writers are the least likely to verify. I also wrote down the limits (unauthenticated `creator_id`, untimed challenge, AI text that scores human would pass).
 
 ---
 
