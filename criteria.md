@@ -42,63 +42,60 @@ Two things worth knowing before you pick numbers:
   a **miss**.
 
 ---
-## 1.
+## 1. False positives stay rare
 
-<!-- Your criterion. It must name a number. -->
+Of 10 pieces I wrote myself, at least 3 of them written plainly, at most 1 is
+labelled high-confidence AI, in each of 3 trials.
 
-
-
-**Why this target:**
-
-
-
----
-
-## 2.
-
-<!-- Your criterion. -->
-
-
-
-**Why this target:**
-
-
+**Why this target:** On a writing site a wrong accusation costs a real person
+far more than a missed detection costs the site. The plain-writing pieces are
+included on purpose, because plain human writing is the known blind spot of the
+model signal.
 
 ---
 
-## 3.
+## 2. Clearly-AI and clearly-human text score apart
 
-<!-- Your criterion. -->
+Over 5 clearly-AI and 5 clearly-human texts, the mean combined score of the AI
+set is at least 0.30 above the mean of the human set, in each of 3 trials.
 
-
-
-**Why this target:**
-
-
+**Why this target:** 0.30 is about one label band. If the two sets sit closer
+than that, the signals aren't telling them apart and the labels are noise.
 
 ---
 
-## 4.
+## 3. Every label is reachable
 
-<!-- Your criterion. -->
+Across a set of 20 texts, each of the three labels (high-confidence human,
+unsure, high-confidence AI) is produced at least once, in each of 3 trials.
 
-
-
-**Why this target:**
-
-
+**Why this target:** A label no score can produce means a gap in the ranges, so
+a reader would never see it. It is also an easy mistake to make while the style
+signal is still a stub.
 
 ---
 
-## 5.
+## 4. Appeals always change status and always get recorded
 
-<!-- Your criterion. -->
+10 of 10 appeals on valid `content_id`s return 200, set the status to
+`under_review` and add exactly one appeal entry to the log. An appeal on an
+unknown `content_id` returns 404 and adds no appeal entry.
 
+**Why this target:** The appeal is the only recourse a wrongly accused writer
+has, so it must never fail silently. 10 of 10 because there is no acceptable
+rate of lost appeals.
 
+---
 
-**Why this target:**
+## 5. Bad input gets a 400, never a crash
 
+4 of 4 bad bodies sent to `/submit` return 400 and never 500: missing `text`,
+empty `text`, a 20,000-character `text`, and a body that is JSON but not an
+object (a bare list).
 
+**Why this target:** A crash on malformed input is one of the most common real
+failures, and unit 8's attack set will probe it. 4 of 4 because each case is a
+single deterministic check.
 
 ---
 
