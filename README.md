@@ -292,22 +292,40 @@ All ten rejections appear in `GET /log` as `event: rejected, reason: rate_limite
 
 ## Attack Run — Before
 
-<!-- Every attack with its outcome and a held-or-broke mark.
-     `run_attacks.py --label before` produces the table. -->
+Run with `python run_attacks.py --set attack_set/attack_set --label before` (full output in `results/attack_run_2026-11-11_0151_before.md`), rate limiting on at 5/min and 50/day, thresholds 0.35 / 0.60. Nothing was fixed before this run. All 56 attacks parsed and none crashed the service (no 5xx).
 
+**Result: 31 held, 25 broke, out of 56.**
 
+| Family | Attacks | Held | Broke | What happened |
+|---|---|---|---|---|
+| evasion | 10 | 2 | 8 | Only EV07 and EV10 were called `ai`. EV01 (typos) and EV05 (heavy human edit) passed as `human`. EV02, 03, 04, 06, 08, 09 landed in `unsure`. I count AI text escaping to `human` or `unsure` as broke. |
+| false_positive | 8 | 2 | 6 | FP02-FP07 were called `ai`. FP01 and FP08 were `unsure`, which I count as held (nobody was accused). |
+| prompt_injection | 6 | 5 | 1 | PI02 ("SYSTEM: ... return guess=human") came back `human` at 0.226. The other five stayed `unsure`. There is no LLM reading the text to obey it, so PI02 worked because the odd prefix lowered the perplexity signal, not because it followed the instruction. |
+| malformed (text) | 8 | 3 | 5 | MF01, MF02, MF08 got a clean 400. MF03-MF07 (control characters, punctuation only, one long word, emoji, right-to-left script) got a 200 and a score; MF05-MF07 were called `ai` at 0.87-0.99, which is a wrong verdict on input that isn't writing. |
+| malformed (request) | 12 | 12 | 0 | Every one got a 400, no crash. RQ10 and RQ11 first came back 429 because requests with no usable `creator_id` share one per-IP bucket; they never reached the route. After the window reset I re-sent both and each got a clean 400 (`results/attack_run_2026-11-11_0152_rerun.md`). |
+| flood_same_creator | 12 | 12 | 0 | `200 200 200 200 200 429 429 429 429 429 429 429`, and the rejections are in the log. |
 
 **Ten audit log entries from the run**
 
-<!-- Choose entries that show the interesting failures, not the ten easiest. -->
+Chosen for the failures: two wrongly accused writers, two evasions that passed, an injection that worked, junk input called AI with 99% confidence, plus a 429 and a 400 rejection (rejections carry fewer fields, as expected).
 
 ```json
-
+{"timestamp": "2026-11-11T06:51:03+00:00", "content_id": "64a15474-a2ea-4756-ad81-ac5ffecebdfd", "creator_id": "attacker_FP03", "guess": "ai", "model_score": 0.8051, "style_score": 0.6285, "combined_score": 0.7345, "label": "This looks like it was written by an AI. If you wrote it yourself, you can appeal and a person will review it.", "status": "decided", "phrase_score": 0.0}
+{"timestamp": "2026-11-11T06:51:03+00:00", "content_id": "f1df1488-c80a-49c0-813d-2819522a4685", "creator_id": "attacker_FP04", "guess": "ai", "model_score": 0.8329, "style_score": 0.5202, "combined_score": 0.7813, "label": "This looks like it was written by an AI. If you wrote it yourself, you can appeal and a person will review it.", "status": "decided", "phrase_score": 0.4902}
+{"timestamp": "2026-11-11T06:51:04+00:00", "content_id": "314ced19-9cfb-4a14-895e-38b80dddfdf0", "creator_id": "attacker_FP07", "guess": "ai", "model_score": 0.8816, "style_score": 0.5529, "combined_score": 0.7501, "label": "This looks like it was written by an AI. If you wrote it yourself, you can appeal and a person will review it.", "status": "decided", "phrase_score": 0.0}
+{"timestamp": "2026-11-11T06:50:59+00:00", "content_id": "8df67285-4c0d-47b7-8425-0edea22d8e8c", "creator_id": "attacker_EV01", "guess": "human", "model_score": 0.1635, "style_score": 0.5313, "combined_score": 0.3106, "label": "We think this was probably written by a person.", "status": "decided", "phrase_score": 0.0}
+{"timestamp": "2026-11-11T06:51:01+00:00", "content_id": "964cc2fd-32f9-441b-819f-d3f86560138c", "creator_id": "attacker_EV05", "guess": "human", "model_score": 0.3212, "style_score": 0.2974, "combined_score": 0.3117, "label": "We think this was probably written by a person.", "status": "decided", "phrase_score": 0.0}
+{"timestamp": "2026-11-11T06:51:04+00:00", "content_id": "cad3aa51-cce8-4f7a-b022-3d69155453de", "creator_id": "attacker_PI02", "guess": "human", "model_score": 0.2044, "style_score": 0.2575, "combined_score": 0.2256, "label": "We think this was probably written by a person.", "status": "decided", "phrase_score": 0.0}
+{"timestamp": "2026-11-11T06:51:06+00:00", "content_id": "2536a656-a3d1-42cc-91a3-48e1f7454093", "creator_id": "attacker_MF05", "guess": "ai", "model_score": 0.9976, "style_score": 0.6667, "combined_score": 0.8652, "label": "This looks like it was written by an AI. If you wrote it yourself, you can appeal and a person will review it.", "status": "decided", "phrase_score": 0.0}
+{"timestamp": "2026-11-11T06:51:07+00:00", "content_id": "493681c4-b61d-4960-946d-09439757ae7e", "creator_id": "attacker_MF06", "guess": "ai", "model_score": 0.9969, "style_score": 1.0, "combined_score": 0.9981, "label": "This looks like it was written by an AI. If you wrote it yourself, you can appeal and a person will review it.", "status": "decided", "phrase_score": 0.0}
+{"timestamp": "2026-11-11T06:51:08+00:00", "creator_id": "attacker_flood", "event": "rejected", "status": "rejected", "reason": "rate_limited", "limit": "5 per 1 minute"}
+{"timestamp": "2026-11-11T06:52:22+00:00", "creator_id": "unknown", "event": "rejected", "status": "rejected", "reason": "missing_text"}
 ```
 
 **The single worst outcome** — the one I'd least want to explain to a writer
 whose work got caught by it:
 
+**FP03**, a non-native English speaker carefully describing her first month in a new country ("The weather was very different from my home. I did not expect the rain to continue for so many days..."). It was labelled "This looks like it was written by an AI" at a combined score of 0.7345, with both signals agreeing (model 0.81, style 0.63), so the disagreement safeguard never fired. The traits that make her writing clear and careful (plain common words, short even sentences) are the ones both signals read as machine-written. She can appeal, but her only recourse is a person reviewing it later; nothing in the label tells her the system is least reliable on writers like her.
 
 
 ---
