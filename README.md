@@ -294,7 +294,7 @@ All ten rejections appear in `GET /log` as `event: rejected, reason: rate_limite
 
 Run with `python run_attacks.py --set attack_set/attack_set --label before` (full output in `results/attack_run_2026-11-11_0151_before.md`), rate limiting on at 5/min and 50/day, thresholds 0.35 / 0.60. Nothing was fixed before this run. All 56 attacks parsed and none crashed the service (no 5xx).
 
-**Result: 31 held, 25 broke, out of 56.**
+**Result: 36 held, 20 broke, out of 56.** (Corrected in Milestone 4: I first wrote 31 and 25, but the rows below sum to 2+2+5+3+12+12 = 36 held and 8+6+1+5 = 20 broke.)
 
 | Family | Attacks | Held | Broke | What happened |
 |---|---|---|---|---|
@@ -341,6 +341,14 @@ whose work got caught by it:
 | 5. Bad input gets a 400, never a 500 | 4 of 4 return 400 | 4/4 | 4/4 | 4/4 | MET |
 
 All three runs were identical to the last digit, as expected: nothing in either signal is random (GPT-2 runs deterministically on the same input), so a miss is a property of the system, not noise. The targets are exactly as I wrote them in `criteria.md`; I did not touch them.
+
+**How I decided each verdict** (against the targets in `criteria.md`, unchanged, and the rule that a target has to hold in every trial):
+
+1. **MISSED.** The target was at most 1 of 10 labelled high-confidence AI. I got 3 of 10 (pieces 2, 3 and 8) in all three trials, so it fails in every trial, not just one.
+2. **MET, but only just.** The target was a mean gap of at least 0.30 in each trial. I got 0.691 - 0.367 = 0.324 each time, which clears it by 0.024. Per text it is closer than the mean suggests: the lowest AI text scored 0.600 and the highest human text scored 0.584.
+3. **MET.** All three labels appeared in every trial (5 human, 8 unsure, 7 ai of 20). The target only asks for at least one of each, so this says the bands are reachable, not that they are right.
+4. **MET.** 10 of 10 valid appeals returned 200, set `under_review` and added exactly one appeal entry, and the unknown id returned 404 with no entry, in all three trials.
+5. **MET.** 4 of 4 bad bodies returned 400 and none returned 500, in all three trials. This only shows the route doesn't crash; see Diagnoses for the junk inputs it did not cover.
 
 **Be clear about whose text this is.** I asked Claude to write the ten criterion-1 pieces (first person, informal, four of them plain on purpose), so they are **not my own writing**, and criterion 1 here measures that text rather than mine. The five AI texts in criteria 2 and 3 are also Claude-written; two of the human texts (`FP01`, `EV05`) and five of the borderline ones come from the staff attack set; three more human-style texts are Claude-written. Everything is in `scenarios.py`. Re-running criterion 1 on pieces I really wrote is still to do.
 
@@ -554,21 +562,36 @@ All three runs were identical to the last digit, as expected: nothing in either 
 
 **Diagnoses**
 
-<!-- For each miss AND each broken attack: the stage and the mechanism.
+Twenty-one failures (criterion 1 plus the 20 attacks that broke in Milestone 2) come down to four causes, and two of the four are the same signal. I checked each against the saved scores and by re-running the model on edited text, not just by reading the code.
 
-     Your service has five stages: the route, signal one, signal two, the
-     combining rule, and the label mapping.
+**Cause 1 — Signal one reads plain writing as machine-like (criterion 1, FP02-FP07: 7 failures).** Stage: signal one (`detector.py::model_signal`), with signal two agreeing and the label mapping doing the accusing.
+- Mechanism: GPT-2 finds common words in short, ordinary sentences easy to predict, and low surprise scores as AI. Criterion 1's three flagged pieces are all ones written plainly on purpose: model scores 0.800, 0.672 and 0.790 (pieces 2, 3, 8). FP02-FP07 sit at 0.739-0.882 on the same signal.
+- Signal two agreed rather than corrected it. `punctuation_density` (`stylometry.py`) maps "few commas" to AI: these texts have almost none (raw 0.000-0.013 against a 0.15 "fully human" mark), so that measure scores 0.91-1.0 on them. Style came out 0.464, 0.498 and 0.516 for the three flagged pieces.
+- The combining rule (`scoring.py::combine_signals`, 0.6 model + 0.4 style) is built to pull disagreements toward "unsure", but it never fired: the gaps were 0.34, 0.17 and 0.27, under `DISAGREEMENT_GAP` of 0.4 (the same for FP02-FP07, the largest being FP06 at 0.39). Two signals that share the same bias do not cancel.
+- Label mapping adds the last push: `AI_THRESHOLD` is 0.60 (lowered from 0.65 in unit 7). Piece 3 combined to 0.6026, so it is flagged by 0.0026. At 0.65 criterion 1 would be 2 of 10, which is still a miss, so the threshold is not the cause, but it decides which writer is accused.
+- FP07 is a separate wrinkle: it repeats a phrase on purpose, so its type-token ratio is 0.46 and signal two scores variety as 0.88 AI. FP04 was also pushed up by the stock-phrase signal (+0.49 x 0.15).
 
-     Not a diagnosis:  "The evasion attacks got through."
-     A diagnosis:      "Four evasion inputs got through. All four had typos
-                        added to AI-generated text. My second signal measures
-                        word variety, and typos raise word variety — so it read
-                        them as more human. My combining rule weights that
-                        signal at 0.6, so it dragged the whole score down."
+**Cause 2 — Neither signal reads meaning, so cosmetic changes move signal one (EV01, EV05, EV08, PI02: 4 failures).** Stage: signal one.
+- EV01 (typos): the same AI paragraph scores model 0.666-0.704 clean (EV03, EV09) and 0.164 with typos. Typos like "poistioned" and "thsi" become rare tokens GPT-2 cannot predict, which reads as human. Fixing just two of them moved it from 0.164 to 0.255, so each typo contributes. Signal two barely changed (0.531), so it is the model signal, not word variety, that was fooled.
+- PI02 (injection): it did not work by persuading anything; there is no model reading the instruction. The odd "SYSTEM: ..." prefix is itself unpredictable text: the same body scores 0.754 without it and 0.204 with it, a drop of 0.55 from the prefix alone.
+- EV05 (heavy human editing): model 0.321, style 0.297, both signals read it as human, with fragments, a spread of 0.68 and unusual phrasing like "away-day". This one is arguably not a mistake: a human has rewritten it.
+- EV08 (below the token window): 10 words. Signal one is unreliable on so few tokens (0.245), and the combined 0.360 clears the human threshold (0.35) by 0.01, landing in "unsure". The route accepts it because it only checks that text is non-empty.
 
-     Look for a pattern. Five failures on one signal is one problem, not five. -->
+**Cause 3 — The weighted average and the label mapping leave AI text no margin (EV02, EV03, EV04, EV06, EV09: 5 failures).** Stage: combining rule and label mapping, with signal two as the lever.
+- Even clean AI text only reaches 0.67-0.70 on signal one (EV03 0.666, EV09 0.704). Signal two then pulls it down: `sentence_length_spread` is trivially raised by splitting sentences (EV02: spread 0.85, so that measure scores 0.0 AI) or adding a quote or a casual opening (EV03 style 0.412, EV09 0.379).
+- With a 0.4 weight, a style score around 0.4 costs about 0.1 on the combined score, which is exactly enough to drop 0.70 to 0.57: EV09 is 0.6 x 0.704 + 0.4 x 0.379 = 0.574, under 0.60. None of the five triggered the disagreement pull (the gaps were 0.09-0.32). They all landed at 0.48-0.58, in the wide "unsure" band, so they were not caught, though none was wrongly called human.
 
+**Cause 4 — Junk input reaches scoring and signal two reads it as maximally AI (MF03-MF07: 5 failures).** Stage: signal two (`stylometry.py::words`), with the route letting it through.
+- `words()` only matches `[a-z0-9']+`, so emoji (MF06), right-to-left script (MF07) and punctuation only (MF04) contain zero words. With no words, type-token ratio, punctuation density and sentence spread all come out at the AI end, and style is exactly 1.0. Signal one agrees on repeated or odd tokens (0.997 for emoji, 0.906 for RTL), giving combined scores of 0.998 and 0.944 for MF06 and MF07 and a confident "ai". MF05 (one very long word) is one "sentence", so spread is 0.0, and it combines to 0.865.
+- MF03 (control characters) and MF04 landed in "unsure" only because the signals disagreed by 0.67 and 0.99, and the pull toward 0.5 fired. That was the safeguard working, not the signals.
+- The route (`app.py::submit`) accepts anything non-empty and under 10,000 characters, with no check that the text has letters or enough words, so none of this is stopped at the door.
+- This is not just a test curiosity: any writer using a non-Latin script would get style 1.0 on every submission.
 
+**The pattern.** Causes 1 and 2 are both signal one, and cause 4 is signal two's defaults, so every failure except the label-mapping squeeze in cause 3 traces to the two signals rather than to the route, the limiter or the labels. The deepest problem is that both signals measure how *ordinary* the text looks, not who wrote it. Plain human writing and lightly disguised AI text look the same to them, and the combining rule can only average two views that fail in the same way. The cheapest fix for the accusation harm is therefore not a different threshold: it is a signal that does not share the bias, or a minimum-evidence guard so junk and very short text is never accused.
+
+**Were my targets too easy?** Not the first one: criterion 1 (at most 1 in 10) was a fair target and it caught the real problem, so I am leaving it where it is. Criteria 2 and 3 were too soft. Criterion 2 compares means, so it passed by 0.024 while a real plain human text (0.584) sat 0.016 under the lowest AI text (0.600). Criterion 3 only asks that each label appear once, which a badly calibrated system also passes. Criterion 5 passed 4 of 4 while the attack set found five junk inputs (MF03-MF07) that got confident verdicts, because it only tests for a crash. **The one I would tighten is criterion 2**: require every AI text to score at least 0.10 above every human text, in every trial. That would currently fail (0.600 against 0.584), which is the honest answer.
+
+**Criteria revisions.** None. All five criteria could be measured and gave a verdict, so none counts as broken, and a missed or soft target is not a reason to change it. `criteria.md` is untouched; the tightening above is a note, not an edit.
 
 ---
 
