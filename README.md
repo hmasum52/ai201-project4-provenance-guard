@@ -100,7 +100,7 @@ A lightly-edited AI paragraph ("Honestly, it's pretty important to note that goo
 | formal human | 0.297 | 0.153 | 0.239 |
 | lightly-edited AI | 0.567 | 0.149 | 0.450 |
 
-The clearly-AI and clearly-human texts sit 0.32 apart. "Clearly AI" scored 0.640, just under my first AI threshold of 0.65, so that label was unreachable on it. In Milestone 5 I lowered `AI_THRESHOLD` to 0.60 (in `config.py`). The cost: a few more borderline texts, including plain human writing, will now cross into the AI label. The unsure band shrank from 0.35–0.65 to 0.35–0.60, so I'm trading some protection for writers for a reachable AI label.
+The clearly-AI and clearly-human texts sit 0.32 apart. "Clearly AI" scored 0.640, just under my first AI threshold of 0.65, so that label was unreachable on it. In Milestone 5 I lowered `AI_THRESHOLD` to 0.60 (in `config.py`). The cost: a few more borderline texts, including plain human writing, will now cross into the AI label. The unsure band shrank from 0.35–0.65 to 0.35–0.60, so I'm trading some protection for writers for a reachable AI label. (Unit 8, Milestone 5 later raised `AI_THRESHOLD` to 0.75, so the table below shows 0.35-0.75 and 0.75-1.00; see The Improvement.)
 
 
 
@@ -116,8 +116,8 @@ The clearly-AI and clearly-human texts sit 0.32 apart. "Clearly AI" scored 0.640
 | Label | Score range | The exact text a reader sees |
 |---|---|---|
 | high-confidence human | 0.00 – 0.35 | We think this was probably written by a person. |
-| unsure | 0.35 – 0.60 | We can't tell whether a person or an AI wrote this. If it's yours, you can appeal and ask a person to look. |
-| high-confidence AI | 0.60 – 1.00 | This looks like it was written by an AI. If you wrote it yourself, you can appeal and a person will review it. |
+| unsure | 0.35 – 0.75 | We can't tell whether a person or an AI wrote this. If it's yours, you can appeal and ask a person to look. |
+| high-confidence AI | 0.75 – 1.00 | This looks like it was written by an AI. If you wrote it yourself, you can appeal and a person will review it. |
 
 **Why I worded the "unsure" one this way:** It says "we can't tell" rather than "this might be AI", so the system admits its own limit instead of putting suspicion on the writer. It never says "you". It ends with a next step, the appeal, because the person reading it may have written every word themselves. The AI label keeps the appeal pointer for the same reason.
 
@@ -597,22 +597,55 @@ Twenty-one failures (criterion 1 plus the 20 attacks that broke in Milestone 2) 
 
 ## The Improvement
 
-**What I changed:**
+**What I changed:** one number. `AI_THRESHOLD` in `config.py` went from 0.60 to 0.75, so the "high-confidence AI" band is now 0.75-1.00 and the "unsure" band is 0.35-0.75. Nothing else moved: same weights (0.6 / 0.4 plus the phrase boost), same `HUMAN_THRESHOLD` of 0.35, same signals, same route, same attack set and scenarios, same creator ids.
 
-**Which diagnosis pointed at it:**
+**Which diagnosis pointed at it:** Cause 1 in the Diagnoses above: both signals read plain human writing as machine-like, and the plain pieces and FP02-FP07 all landed at 0.60-0.78, inside the AI band. That is also why criterion 1 was MISSED. I picked the threshold, not the weights or the signals, because it is the one knob that acts directly on "who gets accused", and because one number is easy to measure before and after.
+
+**This partly undoes a choice from unit 7.** I lowered the threshold from 0.65 to 0.60 then, so that a clearly-AI test text (0.640) could reach the AI label at all. Moving it to 0.75 gives that back, and more.
 
 ### Attack Run — After
 
-<!-- Same format. `run_attacks.py --label after` -->
+`python run_attacks.py --set attack_set/attack_set --label after` (`results/attack_run_2026-11-11_0213_after.md`; RQ10 and RQ11 were first 429 again from the shared IP bucket and were re-sent after the window, `results/attack_run_2026-11-11_0214_after_rerun.md`, exactly as in the before run; both returned 400, but the two re-sends fell in the same minute, so that file holds only the second one, RQ11). The same held/broke rules as the before run, applied to both, so the two columns are comparable. All 56 parsed, no 5xx.
 
+| Family | Attacks | Before: held / broke | After: held / broke |
+|---|---|---|---|
+| evasion | 10 | 2 / 8 | 1 / 9 |
+| false_positive | 8 | 2 / 6 | **5 / 3** |
+| prompt_injection | 6 | 5 / 1 | 5 / 1 |
+| malformed (text) | 8 | 3 / 5 | 3 / 5 |
+| malformed (request) | 12 | 12 / 0 | 12 / 0 |
+| flood_same_creator | 12 | 12 / 0 | 12 / 0 |
+| **Total** | **56** | **36 / 20** | **38 / 18** |
 
+Four attacks changed, and nothing else did:
 
-**Did it help, and how do I know:**
+| ID | Combined score | Before | After | Held or broke |
+|---|---|---|---|---|
+| FP02 | 0.703 | ai | unsure | broke -> **held** |
+| FP03 | 0.735 | ai | unsure | broke -> **held** |
+| FP06 | 0.727 | ai | unsure | broke -> **held** |
+| EV07 | 0.669 | ai | unsure | held -> **broke** |
 
-<!-- Widening the unsure band usually fixes one problem and creates another.
-     Reporting that trade honestly is worth full credit. -->
+The worst outcome from the before run, FP03 (the careful non-native writer), is now "unsure" instead of "high-confidence AI".
 
+### Criteria — before and after
 
+| Criterion | Target | Before (runs 1/2/3) | After (runs 1/2/3) | Verdict before -> after |
+|---|---|---|---|---|
+| 1. My own writing flagged as AI | at most 1 of 10 | 3 / 3 / 3 | **0 / 0 / 0** | MISSED -> **MET** |
+| 2. AI vs human score gap | gap >= 0.30 | 0.324 x3 | 0.324 x3 | MET -> MET (unchanged) |
+| 3. All three labels reachable | 3 of 3 labels | 3/3 (5 human, 8 unsure, 7 ai) | 3/3 (5 human, **13 unsure, 2 ai**) | MET -> MET (barely) |
+| 4. Appeals change status and are logged | 10/10 + 404 | 10/10 + 404 x3 | 10/10 + 404 x3 | MET -> MET |
+| 5. Bad input gets a 400 | 4 of 4 | 4/4 x3 | 4/4 x3 | MET -> MET |
+
+Results in `results/run_2026-11-11_0202_before.md` and `results/run_2026-11-11_0215_after.md`. Scores and labels were identical across the three trials in both runs (only the random `content_id`s differ).
+
+**Did it help, and how do I know:** Yes for the writers I was worried about, at a real cost to catching AI: criterion 1 went from MISSED (3 of 10, every trial) to MET (0 of 10), and three of the six accused writers in the attack set (FP02, FP03, FP06) are now "unsure", but the AI label has become close to unreachable.
+
+- **Who pays now.** AI text. Of my five clearly-AI texts, 4 got the AI label before and 1 does now (the other four score 0.600-0.716 and become "unsure"). In the 20-text coverage set the AI label fell from 7 texts to 2. In the attack set EV07 (a padded AI text) slipped through to "unsure". A site that relies on the AI label would now catch very little on its own and has to rely on "unsure" plus a person.
+- **What it did not fix.** FP04 (0.781), FP05 (0.753) and FP07 (0.750) are still labelled AI, and that is the finding that matters: they sit within 0.02 of my highest-scoring AI text (0.798). The two groups overlap, so no threshold separates them; moving the line only decides which group is wrongly handled. Causes 2, 3 and 4 in the Diagnoses are untouched: the typo and injection evasions (EV01, EV05, EV08, PI02), the five evasions the weights leave in "unsure", and the five junk inputs (MF03-MF07) all gave exactly the same results as before.
+- **Two of my targets did not notice the cost.** Criterion 2 is unchanged at 0.324 because it compares mean scores, which a threshold cannot move. Criterion 3 still passes with only 2 of 20 texts labelled AI, so it says the AI label is reachable, not that it is useful. Both are the soft targets I flagged in the Diagnoses.
+- **Caution about the number itself.** I chose 0.75 after seeing these same 56 attacks and these same texts, and FP05 (0.7526) and FP07 (0.7501) sit right on the line. So the improvement on this set is optimistic; I would not expect the same gain on new writing.
 
 ---
 
