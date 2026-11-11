@@ -270,6 +270,16 @@ Limits: `creator_id` is unauthenticated, so anyone could claim another writer's 
 
 ---
 
+## Unit 8 Stretch Features
+
+Declared before building:
+
+- **Doing: per-creator limits, with a note on what that changes.** Written up under Rate Limiting below, with a real run to back it. The limiter already counts per `creator_id`, so this adds evidence and a note, not code.
+- **Not doing: three attacks against someone else's system.** There is no other system available to attack.
+- **Not doing: a second improvement.** Unit 8 allows only the limiter, the log and one improvement to change, and a second change would muddy the single before/after in The Improvement, so the system stays exactly as that milestone left it.
+
+---
+
 ## Rate Limiting
 
 **My limits:** 5 per minute, 50 per day (on `/submit`, `config.py`)
