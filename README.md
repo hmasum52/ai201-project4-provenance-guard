@@ -288,6 +288,20 @@ Declared before building:
 
 **What a caller counts as:** the `creator_id` in the request body, falling back to the IP address when there is none (`rate_limit_key` in `app.py`). The weakness: a script can rotate `creator_id` to get a fresh allowance every time, so this limits honest callers better than determined ones. Counting per IP would stop that but would lump a whole household or school together.
 
+**Per-creator limits: what that changes (stretch).** The key is `creator_id` when the request has one, and the address only when it doesn't (`rate_limit_key` in `app.py`). So this was already per-creator; I checked what that does with a real run (`results/per_creator_check.md`, one address, 5 per minute):
+
+```
+creator alice, 6 requests:                    200 200 200 200 200 429
+creator bob, same address, straight after:    200
+one script rotating 12 different creator_ids: 200 200 200 200 200 200 200 200 200 200 200 200
+6 requests with no creator_id:                400 400 400 400 400 429
+```
+
+- **What it changes for the better.** Alice using up her allowance did not touch Bob, who sent from the same address and got a 200. A per-address limit would have answered Bob with a 429, so one noisy writer would lock out everyone sharing a household, school or office connection.
+- **What it costs.** `creator_id` is whatever the caller says it is, nothing checks it. The script that rotated twelve ids from one address was never limited once, so a determined attacker gets a fresh allowance by inventing ids, and the 50-a-day cap is no cap at all for them. Per-creator limiting protects honest writers better than it stops a script.
+- **The fallback.** A request with no usable `creator_id` is counted against the address instead. Six of them from one address gave five 400s and then a 429, which is why RQ10 and RQ11 were rate limited in the attack runs without ever reaching the route.
+- **What I didn't do.** A generous per-address ceiling on top (say 30 a minute) would close the rotation gap, and it is the obvious next step. I did not add it, because this unit allows only the limiter, the log and one improvement to change, so the code is exactly as Milestone 5 left it.
+
 **The run of status codes when I pushed past it:**
 
 `python run_attacks.py --flood 15` (saved as `results/flood_2026-11-11_0140.md`):
