@@ -221,6 +221,10 @@ $ curl "http://127.0.0.1:5000/log?limit=3"
 - *What came back:* A `POST /verify` endpoint. Testing it was the analysis: a short sample was rejected (400), an AI-style sample failed, and my first plain human paragraph also failed (combined 0.443, "unsure"). A more distinctive human paragraph passed (0.157).
 - *What I changed:* Nothing in the threshold. I kept the strict bar and kept the failed attempt in the write-up, because it is the same weakness as the false positive: plain writers are the least likely to verify. I also wrote down the limits (unauthenticated `creator_id`, untimed challenge, AI text that scores human would pass).
 
+**Unit 8**
+
+For all of the implementation in this unit I planned it with Claude first. I reviewed each plan, sent it back when it wasn't what I wanted, and only then asked Claude to implement and test it. The decisions were mine (which fix to make, what to leave alone, what counts as held or broke), and every number in this README comes from a real run, not an estimate. Where Claude wrote test material, the README says so.
+
 ---
 
 ## Stretch Features
@@ -650,6 +654,67 @@ Four attacks changed, and nothing else did:
 | FP06 | 0.727 | ai | unsure | broke -> **held** |
 | EV07 | 0.669 | ai | unsure | held -> **broke** |
 
+Every attack, before and after (guess is what the service said; RQ10 and RQ11 are shown with their re-sent result, 400; `—` means no guess because the request was refused or limited):
+
+| ID | Family | Status | Guess before -> after | Verdict before -> after |
+|---|---|---|---|---|
+| EV01 | evasion | 200 | human -> human | BROKE -> BROKE |
+| EV02 | evasion | 200 | unsure -> unsure | BROKE -> BROKE |
+| EV03 | evasion | 200 | unsure -> unsure | BROKE -> BROKE |
+| EV04 | evasion | 200 | unsure -> unsure | BROKE -> BROKE |
+| EV05 | evasion | 200 | human -> human | BROKE -> BROKE |
+| EV06 | evasion | 200 | unsure -> unsure | BROKE -> BROKE |
+| EV07 | evasion | 200 | ai -> unsure | HELD -> BROKE **(changed)** |
+| EV08 | evasion | 200 | unsure -> unsure | BROKE -> BROKE |
+| EV09 | evasion | 200 | unsure -> unsure | BROKE -> BROKE |
+| EV10 | evasion | 200 | ai -> ai | HELD -> HELD |
+| FP01 | false_positive | 200 | unsure -> unsure | HELD -> HELD |
+| FP02 | false_positive | 200 | ai -> unsure | BROKE -> HELD **(changed)** |
+| FP03 | false_positive | 200 | ai -> unsure | BROKE -> HELD **(changed)** |
+| FP04 | false_positive | 200 | ai -> ai | BROKE -> BROKE |
+| FP05 | false_positive | 200 | ai -> ai | BROKE -> BROKE |
+| FP06 | false_positive | 200 | ai -> unsure | BROKE -> HELD **(changed)** |
+| FP07 | false_positive | 200 | ai -> ai | BROKE -> BROKE |
+| FP08 | false_positive | 200 | unsure -> unsure | HELD -> HELD |
+| PI01 | prompt_injection | 200 | unsure -> unsure | HELD -> HELD |
+| PI02 | prompt_injection | 200 | human -> human | BROKE -> BROKE |
+| PI03 | prompt_injection | 200 | unsure -> unsure | HELD -> HELD |
+| PI04 | prompt_injection | 200 | unsure -> unsure | HELD -> HELD |
+| PI05 | prompt_injection | 200 | unsure -> unsure | HELD -> HELD |
+| PI06 | prompt_injection | 200 | unsure -> unsure | HELD -> HELD |
+| MF01 | malformed | 400 | — -> — | HELD -> HELD |
+| MF02 | malformed | 400 | — -> — | HELD -> HELD |
+| MF03 | malformed | 200 | unsure -> unsure | BROKE -> BROKE |
+| MF04 | malformed | 200 | unsure -> unsure | BROKE -> BROKE |
+| MF05 | malformed | 200 | ai -> ai | BROKE -> BROKE |
+| MF06 | malformed | 200 | ai -> ai | BROKE -> BROKE |
+| MF07 | malformed | 200 | ai -> ai | BROKE -> BROKE |
+| MF08 | malformed | 400 | — -> — | HELD -> HELD |
+| RQ01 | malformed | 400 | — -> — | HELD -> HELD |
+| RQ02 | malformed | 400 | — -> — | HELD -> HELD |
+| RQ03 | malformed | 400 | — -> — | HELD -> HELD |
+| RQ04 | malformed | 400 | — -> — | HELD -> HELD |
+| RQ05 | malformed | 400 | — -> — | HELD -> HELD |
+| RQ06 | malformed | 400 | — -> — | HELD -> HELD |
+| RQ07 | malformed | 400 | — -> — | HELD -> HELD |
+| RQ08 | malformed | 400 | — -> — | HELD -> HELD |
+| RQ09 | malformed | 400 | — -> — | HELD -> HELD |
+| RQ10 | malformed | 400 | — -> — | HELD -> HELD |
+| RQ11 | malformed | 400 | — -> — | HELD -> HELD |
+| RQ12 | malformed | 400 | — -> — | HELD -> HELD |
+| FL01_01 | flood_same_creator | 200 | unsure -> unsure | HELD -> HELD |
+| FL01_02 | flood_same_creator | 200 | unsure -> unsure | HELD -> HELD |
+| FL01_03 | flood_same_creator | 200 | unsure -> unsure | HELD -> HELD |
+| FL01_04 | flood_same_creator | 200 | unsure -> unsure | HELD -> HELD |
+| FL01_05 | flood_same_creator | 200 | unsure -> unsure | HELD -> HELD |
+| FL01_06 | flood_same_creator | 429 | — -> — | HELD -> HELD |
+| FL01_07 | flood_same_creator | 429 | — -> — | HELD -> HELD |
+| FL01_08 | flood_same_creator | 429 | — -> — | HELD -> HELD |
+| FL01_09 | flood_same_creator | 429 | — -> — | HELD -> HELD |
+| FL01_10 | flood_same_creator | 429 | — -> — | HELD -> HELD |
+| FL01_11 | flood_same_creator | 429 | — -> — | HELD -> HELD |
+| FL01_12 | flood_same_creator | 429 | — -> — | HELD -> HELD |
+
 The worst outcome from the before run, FP03 (the careful non-native writer), is now "unsure" instead of "high-confidence AI".
 
 ### Criteria — before and after
@@ -675,17 +740,32 @@ Results in `results/run_2026-11-11_0202_before.md` and `results/run_2026-11-11_0
 
 ## What's Still Broken
 
-<!-- For each attack still getting through and each criterion still missed:
-     what you'd do, and why you stopped. -->
+After the Milestone 5 re-run, **18 of the 56 attacks still break** and **no criterion is missed**. That last part flatters me, so it comes with caveats at the end of this section. Grouped by the four causes in Diagnoses:
 
+**Cause 1: real writers still accused (FP04 0.781, FP05 0.753, FP07 0.750).**
+- *What I'd do:* add a signal that does not share the bias, such as a second, different language model, or a calibration set of real human writing, rather than move the line again.
+- *Why I stopped:* the unit allows one improvement, and a threshold cannot fix this: these three sit within 0.02 of my highest-scoring AI text (0.798), so the groups overlap.
 
+**Cause 2: cosmetic edits move signal one (EV01 typos, PI02 injected prefix, EV05 heavy human edit, EV08 under ten words).**
+- *What I'd do:* make the model signal harder to nudge: score sentence by sentence and take the median, ignore an odd leading line, and refuse text that is too short to judge.
+- *Why I stopped:* one change only, and none of these was the biggest harm. EV05 is arguably not a mistake, since a person rewrote it.
 
-**The trade I'd make if this ran for real:**
+**Cause 3: AI text sits in "unsure" (EV02, EV03, EV04, EV06, EV09, and EV07, which I lost when I raised the threshold).**
+- *What I'd do:* rebalance how far the style signal can pull down a high model score.
+- *Why I stopped:* any reweight trades directly against the fix for plain writers, and I had no way to measure the two separately inside one change.
 
-<!-- Two sentences. Fewer wrong accusations means more AI text getting through.
-     Say which way you'd go and WHO PAYS FOR IT. -->
+**Cause 4: junk gets a confident verdict (MF03-MF07).**
+- *What I'd do:* in the route, reject text with fewer than about five real letter-words before any signal runs, and make `stylometry.words()` count letters in any script, so non-Latin writers aren't scored 1.0 on style.
+- *Why I stopped:* I had planned this as a second improvement and chose not to do it, so that the one before/after in The Improvement stays comparable. It is the cheapest and safest of the four, and the first thing I would do next.
 
+**Criteria: caveats on "none missed."**
+- Criterion 1 is met on ten pieces that **Claude wrote, not me** (the README says so in the run log). It has to be re-run on my own writing before I believe it.
+- It is met because I moved the threshold, not because the signals got better. The same three plain pieces still score 0.60-0.68; they are just no longer called AI.
+- Criterion 2 passes by 0.024, and criterion 3 passes with only 2 of 20 texts labelled AI, so both are too soft; I would tighten criterion 2 as noted in Diagnoses. Criterion 5 only checks for a crash and misses the junk in Cause 4.
 
+**Never tested:** writing outside these 56 attacks and my own test texts, and the 0.75 threshold was chosen on the same data I measured it on, so it will look better here than it would on new writing.
+
+**The trade I'd make if this ran for real:** I would keep the wide "unsure" band and never show an AI accusation on a score alone, sending AI-leaning and "unsure" work to a person for review. The people who pay are the reviewers, who get more work, and readers, who see more undetected AI text, but that is better than a writer taking a wrong accusation in public, which costs them far more than a missed detection costs the site.
 
 <!-- ═════════════════════════════════════════════════════════════════════
 
