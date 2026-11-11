@@ -272,25 +272,21 @@ Limits: `creator_id` is unauthenticated, so anyone could claim another writer's 
 
 ## Rate Limiting
 
-**My limits:** ___ per minute, ___ per day
+**My limits:** 5 per minute, 50 per day (on `/submit`, `config.py`)
 
-**Why those numbers and not others:**
-<!-- Think about two people: a real writer submitting their own work a few
-     times an hour, and a script sending a thousand variations to map your
-     thresholds. Your numbers have to be liveable for the first and hostile to
-     the second. -->
+**Why those numbers and not others:** A real writer submits their own work a few times an hour, and might send a quick burst of revisions of one piece, so 5 a minute never gets in their way and 50 a day is far more than most writers produce. A script mapping my thresholds needs hundreds of variations, and scoring takes only 1-2 seconds, so with no limit it could send about 30 a minute. At 5 a minute and 50 a day it gets at most 50 probes per key per day, which is too few to map the 0.35 and 0.60 thresholds quickly. I did not go lower (3 a minute, 20 a day) because a writer revising a long essay several times could be locked out, and that is a real person being punished for the defense.
 
-**What a caller counts as:** <!-- per address, or per creator_id? They fail
-differently — one script can look like a thousand callers, and one household
-can look like one. -->
+**What a caller counts as:** the `creator_id` in the request body, falling back to the IP address when there is none (`rate_limit_key` in `app.py`). The weakness: a script can rotate `creator_id` to get a fresh allowance every time, so this limits honest callers better than determined ones. Counting per IP would stop that but would lump a whole household or school together.
 
 **The run of status codes when I pushed past it:**
 
-<!-- python run_attacks.py --flood 15 -->
+`python run_attacks.py --flood 15` (saved as `results/flood_2026-11-11_0140.md`):
 
 ```
-
+200 200 200 200 200 429 429 429 429 429 429 429 429 429 429
 ```
+
+All ten rejections appear in `GET /log` as `event: rejected, reason: rate_limited, limit: "5 per 1 minute"`.
 
 ---
 
