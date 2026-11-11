@@ -332,21 +332,224 @@ whose work got caught by it:
 
 ## Run Log and Verdicts
 
-<!-- Your five criteria across three trials. `run_eval.py --label before`. -->
-
 | Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict |
 |---|---|---|---|---|---|
-| 1.  |  |  |  |  |  |
-| 2.  |  |  |  |  |  |
-| 3.  |  |  |  |  |  |
-| 4.  |  |  |  |  |  |
-| 5.  |  |  |  |  |  |
+| 1. My own writing flagged as AI | at most 1 of 10 labelled high-confidence AI | 3/10 | 3/10 | 3/10 | **MISSED** |
+| 2. Clearly-AI and clearly-human score apart | mean combined gap >= 0.30 | 0.324 | 0.324 | 0.324 | MET (barely) |
+| 3. All three labels reachable | 3 of 3 labels in 20 texts | 3/3 (5 human, 8 unsure, 7 ai) | 3/3 | 3/3 | MET |
+| 4. Appeals always change status and are recorded | 10 of 10, and unknown id gives 404 with no entry | 10/10 + 404 ok | 10/10 + 404 ok | 10/10 + 404 ok | MET |
+| 5. Bad input gets a 400, never a 500 | 4 of 4 return 400 | 4/4 | 4/4 | 4/4 | MET |
 
-**Real output from one trial**, pasted as text, naming the file and function
-that produced it:
+All three runs were identical to the last digit, as expected: nothing in either signal is random (GPT-2 runs deterministically on the same input), so a miss is a property of the system, not noise. The targets are exactly as I wrote them in `criteria.md`; I did not touch them.
+
+**Be clear about whose text this is.** I asked Claude to write the ten criterion-1 pieces (first person, informal, four of them plain on purpose), so they are **not my own writing**, and criterion 1 here measures that text rather than mine. The five AI texts in criteria 2 and 3 are also Claude-written; two of the human texts (`FP01`, `EV05`) and five of the borderline ones come from the staff attack set; three more human-style texts are Claude-written. Everything is in `scenarios.py`. Re-running criterion 1 on pieces I really wrote is still to do.
+
+**What I extended in the harness.** The starter `run_eval.py` only posted to `/submit`. I added (a) `appeal_trial` for criterion 4 (submit, appeal, check 200, `under_review`, exactly one new log entry, plus an unknown-id 404), (b) `content_id` and `phrase_score` in each result so the combined score for criterion 2 can be recomputed with `scoring.combine_signals`, (c) a guard in `describe` and `scenarios.validate` so a bare-list body can be sent for criterion 5. No change to the service.
+
+**Real output from one trial** (trial 1 of `results/run_2026-11-11_0202_before.md`), pasted as text. Produced by `run_eval.py::main` (criteria 1, 2, 3, 5) and `run_eval.py::appeal_trial` (criterion 4), against `app.py::submit` and `app.py::appeal`. Long fields trimmed to the relevant rows; the full output is in the results file.
+
+*Criterion 1 — the three pieces labelled AI (all three are the plain ones: #2, #3, #8):*
 
 ```json
+[
+  {
+    "status": 200,
+    "content_id": "1ff62f8b-faea-4a41-878c-89c74ac9345a",
+    "phrase_score": 0.0,
+    "guess": "ai",
+    "confidence": 0.6657,
+    "model_score": 0.8003,
+    "style_score": 0.4639,
+    "label": "This looks like it was written by an AI. If you wrote it yourself, you can appeal and a person will review it.",
+    "sent": "Last weekend I cleaned the kitchen. I took everything out of the cupbo"
+  },
+  {
+    "status": 200,
+    "content_id": "44c8c53b-51b0-4535-a279-b3003cfafe01",
+    "phrase_score": 0.0,
+    "guess": "ai",
+    "confidence": 0.6026,
+    "model_score": 0.6722,
+    "style_score": 0.4982,
+    "label": "This looks like it was written by an AI. If you wrote it yourself, you can appeal and a person will review it.",
+    "sent": "My sister called on Sunday to ask if I could look after her cat while "
+  },
+  {
+    "status": 200,
+    "content_id": "de17dddd-13fd-4afe-9c7c-3511f56687c9",
+    "phrase_score": 0.0,
+    "guess": "ai",
+    "confidence": 0.6804,
+    "model_score": 0.7902,
+    "style_score": 0.5158,
+    "label": "This looks like it was written by an AI. If you wrote it yourself, you can appeal and a person will review it.",
+    "sent": "Went to the gym today for the first time in about a month. I did twent"
+  }
+]
+```
 
+*Criterion 2 — first two of each set (means over all five: AI 0.691, human 0.367, gap 0.324):*
+
+```json
+[
+  {
+    "status": 200,
+    "content_id": "0c09a313-3eb4-4106-b60f-8fd6110a6bfc",
+    "phrase_score": 1.0,
+    "guess": "ai",
+    "confidence": 0.7977,
+    "model_score": 0.7445,
+    "style_score": 0.5026,
+    "label": "This looks like it was written by an AI. If you wrote it yourself, you can appeal and a person will review it.",
+    "sent": "Time management is a crucial skill that can significantly impact both "
+  },
+  {
+    "status": 200,
+    "content_id": "bd55f7ee-590c-4bec-8e22-24f6ca924292",
+    "phrase_score": 0.5376,
+    "guess": "ai",
+    "confidence": 0.6973,
+    "model_score": 0.9068,
+    "style_score": 0.4733,
+    "label": "This looks like it was written by an AI. If you wrote it yourself, you can appeal and a person will review it.",
+    "sent": "Renewable energy plays a pivotal role in addressing the challenges of "
+  },
+  {
+    "status": 200,
+    "content_id": "36e8e141-ef9f-4fd4-8b1c-980f8c23fd8b",
+    "phrase_score": 0.0,
+    "guess": "unsure",
+    "confidence": 0.5838,
+    "model_score": 0.6175,
+    "style_score": 0.5332,
+    "label": "We can't tell whether a person or an AI wrote this. If it's yours, you can appeal and ask a person to look.",
+    "sent": "We got to the campsite about four. The pitch was fine, a bit sloped, b"
+  },
+  {
+    "status": 200,
+    "content_id": "d3993396-20b6-4010-8f16-8791bbbeb479",
+    "phrase_score": 0.0,
+    "guess": "human",
+    "confidence": 0.6883,
+    "model_score": 0.3212,
+    "style_score": 0.2974,
+    "label": "We think this was probably written by a person.",
+    "sent": "Communication at work matters more than people say it does — and I mea"
+  }
+]
+```
+
+*Criterion 3 — one text per label (full run: 5 human, 8 unsure, 7 ai):*
+
+```json
+[
+  {
+    "status": 200,
+    "content_id": "457b07f8-debd-4ff8-bed0-fe13d161d646",
+    "phrase_score": 0.0,
+    "guess": "unsure",
+    "confidence": 0.5995,
+    "model_score": 0.8641,
+    "style_score": 0.4514,
+    "label": "We can't tell whether a person or an AI wrote this. If it's yours, you can appeal and ask a person to look.",
+    "sent": "Social media has transformed the way people communicate in the modern "
+  },
+  {
+    "status": 200,
+    "content_id": "a31e9af1-60ec-4500-a752-41bcf8e11492",
+    "phrase_score": 0.0,
+    "guess": "human",
+    "confidence": 0.6883,
+    "model_score": 0.3212,
+    "style_score": 0.2974,
+    "label": "We think this was probably written by a person.",
+    "sent": "Communication at work matters more than people say it does — and I mea"
+  },
+  {
+    "status": 200,
+    "content_id": "0380bb1f-28e3-4a5a-8f39-2edf698d404e",
+    "phrase_score": 1.0,
+    "guess": "ai",
+    "confidence": 0.7977,
+    "model_score": 0.7445,
+    "style_score": 0.5026,
+    "label": "This looks like it was written by an AI. If you wrote it yourself, you can appeal and a person will review it.",
+    "sent": "Time management is a crucial skill that can significantly impact both "
+  }
+]
+```
+
+*Criterion 4 — first valid appeal and the unknown-id check:*
+
+```json
+[
+  {
+    "sent": "I started the new job on Monday. The office is about forty minutes fro",
+    "submit_status": 200,
+    "content_id": "baad77f9-9c33-4c96-a55d-9ef0c5b89eb2",
+    "status": 200,
+    "appeal_status": "under_review",
+    "new_log_entries": 1,
+    "ok": true
+  },
+  {
+    "sent": "appeal on unknown content_id",
+    "status": 404,
+    "new_log_entries": 0,
+    "ok": true
+  }
+]
+```
+
+*Criterion 5 — all four bad bodies:*
+
+```json
+[
+  {
+    "status": 400,
+    "content_id": null,
+    "phrase_score": null,
+    "guess": null,
+    "confidence": null,
+    "model_score": null,
+    "style_score": null,
+    "label": null,
+    "sent": "{\"creator_id\": \"eval_bad_missing\"}"
+  },
+  {
+    "status": 400,
+    "content_id": null,
+    "phrase_score": null,
+    "guess": null,
+    "confidence": null,
+    "model_score": null,
+    "style_score": null,
+    "label": null,
+    "sent": "(empty text)"
+  },
+  {
+    "status": 400,
+    "content_id": null,
+    "phrase_score": null,
+    "guess": null,
+    "confidence": null,
+    "model_score": null,
+    "style_score": null,
+    "label": null,
+    "sent": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  {
+    "status": 400,
+    "content_id": null,
+    "phrase_score": null,
+    "guess": null,
+    "confidence": null,
+    "model_score": null,
+    "style_score": null,
+    "label": null,
+    "sent": "[\"text\", \"creator_id\"]"
+  }
+]
 ```
 
 **Diagnoses**

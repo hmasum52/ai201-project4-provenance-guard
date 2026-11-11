@@ -60,10 +60,63 @@ def bodies_for(scenario):
 
 def describe(body):
     """A short, readable note of what was sent — for the report."""
-    if set(body) == {"text", "creator_id"} and isinstance(body.get("text"), str):
+    if isinstance(body, dict) and set(body) == {"text", "creator_id"} \
+            and isinstance(body.get("text"), str):
         text = body["text"]
         return text[:70] if text else "(empty text)"
     return json.dumps(body)[:120]
+
+
+def appeal_trial(url, scenario, trial, timeout):
+    """
+    Criterion 4: submit each text, appeal it, and check the appeal did its job.
+
+    This is an extension to the starter harness (it only posted to /submit): the
+    appeal path can't be tested with text alone, it needs a content_id back.
+    For each text it checks: the appeal returns 200, the item's status is
+    `under_review`, and exactly one new `appeal` entry reached the audit log.
+    A last appeal on an unknown content_id must return 404 and add no entry.
+    """
+    import requests
+
+    def appeal_count():
+        entries = requests.get(f"{url}/log", timeout=timeout).json()["entries"]
+        return sum(1 for e in entries if e.get("event") == "appeal")
+
+    results = []
+    for i, text in enumerate(scenario["appeals"], 1):
+        row = {"sent": text[:70]}
+        try:
+            sub = requests.post(f"{url}/submit", timeout=timeout, json={
+                "text": text, "creator_id": f"eval_appeal_t{trial}_{i}"})
+            row["submit_status"] = sub.status_code
+            content_id = sub.json().get("content_id")
+            row["content_id"] = content_id
+            before = appeal_count()
+            resp = requests.post(f"{url}/appeal", timeout=timeout, json={
+                "content_id": content_id, "reasoning": "I wrote this myself."})
+            row["status"] = resp.status_code
+            row["appeal_status"] = resp.json().get("status")
+            row["new_log_entries"] = appeal_count() - before
+            row["ok"] = (resp.status_code == 200
+                         and row["appeal_status"] == "under_review"
+                         and row["new_log_entries"] == 1)
+        except Exception as exc:  # noqa: BLE001
+            row.update({"status": None, "error": f"{type(exc).__name__}: {exc}", "ok": False})
+        results.append(row)
+
+    row = {"sent": "appeal on unknown content_id"}
+    try:
+        before = appeal_count()
+        resp = requests.post(f"{url}/appeal", timeout=timeout, json={
+            "content_id": "no-such-id", "reasoning": "testing"})
+        row["status"] = resp.status_code
+        row["new_log_entries"] = appeal_count() - before
+        row["ok"] = resp.status_code == 404 and row["new_log_entries"] == 0
+    except Exception as exc:  # noqa: BLE001
+        row.update({"status": None, "error": f"{type(exc).__name__}: {exc}", "ok": False})
+    results.append(row)
+    return results
 
 
 def main():
@@ -113,6 +166,12 @@ def main():
         trials = []
         for trial in range(1, args.trials + 1):
             results = []
+            if scenario.get("appeals"):
+                results = appeal_trial(args.url, scenario, trial, args.timeout)
+                trials.append(results)
+                print(f"  trial {trial}: {sum(1 for r in results if r.get('ok'))}"
+                      f" of {len(results)} checks ok")
+                continue
             for i, body in enumerate(bodies_for(scenario), 1):
                 preview = describe(body)
                 try:
@@ -121,6 +180,8 @@ def main():
                     payload = response.json() if response.content else {}
                     results.append({
                         "status": response.status_code,
+                        "content_id": payload.get("content_id"),
+                        "phrase_score": payload.get("phrase_score"),
                         "guess": payload.get("guess"),
                         "confidence": payload.get("confidence"),
                         "model_score": payload.get("model_score"),
