@@ -24,6 +24,7 @@ Routes:
     GET  /health      is the service up, and is the model loaded
 """
 
+import time
 import uuid
 
 from flask import Flask, jsonify, request
@@ -212,10 +213,22 @@ def submit():
     text = payload.get("text")
     creator_id = payload.get("creator_id")
 
+    # Capstone instrumentation: every outcome below records what came in
+    # (first 200 chars, or the raw body when there is no usable text) and how
+    # long the route took.
+    started = time.perf_counter()
+    shown = (text if isinstance(text, str) else request.get_data(as_text=True))[:200]
+
+    def elapsed_ms():
+        return round((time.perf_counter() - started) * 1000, 1)
+
     def bad_input(reason, message):
         audit.log_rejection(
             creator_id=creator_id if isinstance(creator_id, str) else "unknown",
             reason=reason,
+            input=shown,
+            outcome="refused",
+            duration_ms=elapsed_ms(),
         )
         return jsonify({"error": "bad_input", "message": message}), 400
 
@@ -254,6 +267,9 @@ def submit():
         combined_score=combined,
         label=label,
         phrase_score=phrase_score,
+        input=shown,
+        outcome="scored",
+        duration_ms=elapsed_ms(),
     )
     return jsonify({
         "content_id": content_id,
