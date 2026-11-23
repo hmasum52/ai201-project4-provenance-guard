@@ -70,5 +70,10 @@ failed = audit.read_entries()[-1]
 assert failed["reason"] == "detector_unavailable" and failed["outcome"] == "failed", failed
 assert failed["duration_ms"] is not None and failed["input"], failed
 
+# 5. Repeated-word junk clears the word count but is still refused.
+assert submit("asdf asdf asdf asdf asdf asdf asdf asdf", "check_low").status_code == 400
+assert audit.read_entries()[-1]["reason"] == "low_variety_text"
+assert submit("The shop closes at six", "check_five_distinct").status_code == 200
+
 print("check_guard: all checks passed")
 sys.exit(0)

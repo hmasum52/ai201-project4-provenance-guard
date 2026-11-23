@@ -52,6 +52,12 @@ DETECTOR_MAX_TOKENS = 400
 # confident 1.0 ("AI") on an empty word list.
 MIN_WORDS = 5
 
+# Capstone improvement: and with fewer than this many DIFFERENT words, which
+# catches repeated-word junk ("asdf asdf asdf ...") that clears MIN_WORDS but
+# still gets a confident "ai" label. The least varied real text I measured has
+# 8 distinct words; the junk I tested has 1-2.
+MIN_DISTINCT_WORDS = 3
+
 
 # ─── Scoring (Milestone 4) ───────────────────────────────────────────────────
 # How much each signal counts toward the combined score.

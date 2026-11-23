@@ -244,6 +244,12 @@ def submit():
             "not_enough_text",
             f"Send at least {config.MIN_WORDS} words of English text to check.",
         )
+    # Capstone improvement: enough words, but the same one or two over and over.
+    if len(set(stylometry.words(text))) < config.MIN_DISTINCT_WORDS:
+        return bad_input(
+            "low_variety_text",
+            f"Send text with at least {config.MIN_DISTINCT_WORDS} different words to check.",
+        )
 
     try:
         model_score = detector.model_signal(text)
