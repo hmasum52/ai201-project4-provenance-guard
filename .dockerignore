@@ -1,0 +1,9 @@
+.git
+venv
+.venv
+**/__pycache__
+logs
+results
+AGENTS.md
+capstone_project.pdf
+.github
