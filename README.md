@@ -803,3 +803,21 @@ After the Milestone 5 re-run, **18 of the 56 attacks still break** and **no crit
 ---
 
 📖 **How to run this project: [RUNNING.md](RUNNING.md)**
+
+---
+
+## Capstone
+
+**What This Extends**
+
+Provenance Guard (the same one submitted for units 7 and 8). What's new is a minimum-evidence guard on `POST /submit`: text that has too few real words to judge is refused with a 400 before any signal runs, instead of being scored. This is the fix I named as the first thing I'd do in What's Still Broken, Cause 4: junk input (MF03-MF07 in the attack set: control characters, punctuation only, one very long word, emoji, right-to-left script) currently reaches scoring, makes `stylometry.words()` return nothing, pushes the style score to exactly 1.0, and gets a confident "ai" label at 0.87-0.99.
+
+**The Shape**
+
+Shape B, harden against failure. The extension is one change to the bad path: a check in `app.py::submit` that counts words with the same `stylometry.words()` the style signal uses, and returns a 400 (`reason: not_enough_text`, logged like the other rejections) when there are fewer than about five. Counting with the signal's own tokenizer means the guard refuses exactly the inputs the signal cannot read, instead of guessing. The run path, the structured log fields and the cost measurement that every shape needs are part of this unit too, but they are the operational layer around the extension, not the extension.
+
+Out of scope, decided before building:
+
+- **Not changing the signals, weights or thresholds.** Causes 1-3 (plain writers accused, cosmetic edits moving the model signal, AI text stuck in "unsure") stay as unit 8 left them, including `AI_THRESHOLD` at 0.75.
+- **Not teaching the style signal other scripts.** `stylometry.words()` stays Latin-only. A writer using another script will get a 400 telling them this checks English text, which is an honest refusal rather than a confident wrong verdict. Scoring those scripts properly is a bigger change than one unit allows.
+- **Not adding a capability or a hosted deploy.** No new signal or endpoint (shape C), and no hosting (Path A): the model needs more than a free host's 512 MB, so this runs locally.
