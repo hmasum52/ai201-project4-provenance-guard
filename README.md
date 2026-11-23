@@ -1070,3 +1070,85 @@ All five met in all three trials, and the three trials are identical in every nu
 ```
 
 **Were my targets too easy?** Yes, and I checked rather than guessed. Criterion 1 only tests the five junk inputs the extension was built for, and all five have fewer than five words. After the run I sent a few inputs the guard counts as enough text: `asdf asdf asdf asdf asdf asdf asdf asdf` (8 words) came back labelled **ai at 0.97 confidence**, `buy now buy now buy now buy now buy now` at 0.97, and `the the the the the the` at 0.76, all with a style score of exactly 1.0. The guard counts words, not whether they are real writing, so five-word junk walks straight through, and criterion 5 only proves the boundary is at five, not that five is enough. **The one I would tighten is criterion 1**: test a set of at least 10 junk inputs of 5 or more words (repeated tokens, keyboard mashing, numbers only) and require 10 of 10 to be refused. That would fail today.
+
+**The Improvement**
+
+**What I changed:** one check, in `app.py::submit`, right after the 5-word guard: refuse text with fewer than `MIN_DISTINCT_WORDS = 3` different words (`config.py`), counted with the same `stylometry.words()`. It returns a 400 with `reason: low_variety_text` and logs it like every other refusal. Nothing else moved: same signals, weights, thresholds, rate limits and the 5-word guard. I also added three lines to `check_guard.py`.
+
+**Which diagnosis pointed at it:** the probe after the first run (see "Were my targets too easy?" above). The 5-word guard counts words, not whether the words are varied, so `asdf asdf asdf asdf asdf asdf asdf asdf` got through and the style signal read it as exactly 1.0 (the AI end) and the label came back **ai at 0.97 confidence**. Repeating one or two words is the cheapest way to clear a word count, so the fix is aimed at that mechanism and no other. I added criterion 6 to `criteria.md` and committed it (`436fa71`) before running it and before writing the fix.
+
+**How I picked 3:** I measured before choosing. The least varied real text I have (all 31 criterion 2 texts and every attack-set text of 5 or more words) has 8 distinct words; the ten five-word boundary sentences have 5; the ten junk inputs have 1 or 2. A cutoff of 3 sits between them with room on both sides.
+
+**Before and after, side by side** (before: criteria 1-5 from `results/capstone_run_2026-11-23_0121_before.md`, criterion 6 from `results/capstone_run_2026-11-23_0139_before_c6only.md`; after: `results/capstone_run_2026-11-23_0141_after.md`, all six, three trials each):
+
+| Criterion | Target | Before (runs 1/2/3) | After (runs 1/2/3) | Verdict before -> after |
+|---|---|---|---|---|
+| 1. Junk refused, not scored | 5 of 5 | 5/5 x3 | 5/5 x3 | MET -> MET |
+| 2. Real writing not refused, scores unchanged | 31 of 31 | 31/31 x3 | 31/31 x3 | MET -> MET |
+| 3. Guard runs before the model | 5 of 5 under 500 ms | 5/5 x3 | 5/5 x3 (slowest 38.4 ms) | MET -> MET |
+| 4. Complete record for every request | 20 of 20 | 20/20 x3 | 20/20 x3 | MET -> MET |
+| 5. Boundary sits at 5 words | 20 of 20 | 20/20 x3 | 20/20 x3 | MET -> MET |
+| 6. Repeated-word junk refused | 10 of 10 | **0/10 x3** | **10/10 x3** | **MISSED -> MET** |
+
+The ten inputs of criterion 6, what came back before and after (trial 1; the other two trials were the same):
+
+| Input | Before | After |
+|---|---|---|
+| `asdf asdf asdf asdf asdf asdf asdf asdf` | 200 ai (0.9713) | 400 `low_variety_text` |
+| `buy now buy now buy now buy now buy now` | 200 ai (0.9726) | 400 `low_variety_text` |
+| `the the the the the the` | 200 ai (0.7622) | 400 `low_variety_text` |
+| `lol lol lol lol lol lol lol lol lol lol` | 200 ai (0.9785) | 400 `low_variety_text` |
+| `ok ok ok ok ok ok` | 200 ai (0.8193) | 400 `low_variety_text` |
+| `test test test test test test` | 200 unsure (0.5341) | 400 `low_variety_text` |
+| `a b a b a b a b` | 200 ai (0.8407) | 400 `low_variety_text` |
+| `1 1 1 1 1 1 1 1` | 200 ai (0.9852) | 400 `low_variety_text` |
+| `12345 12345 12345 12345 12345` | 200 ai (0.9377) | 400 `low_variety_text` |
+| `no no no no no no no no` | 200 ai (0.9831) | 400 `low_variety_text` |
+
+Raw output, `run_capstone.py::c6` against `app.py::submit` (first two rows of trial 1 each):
+
+```json
+[
+  {
+    "text": "asdf asdf asdf asdf asdf asdf asdf asdf",
+    "status": 200,
+    "reason": null,
+    "guess": "ai",
+    "confidence": 0.9713,
+    "ok": false
+  },
+  {
+    "text": "buy now buy now buy now buy now buy now",
+    "status": 200,
+    "reason": null,
+    "guess": "ai",
+    "confidence": 0.9726,
+    "ok": false
+  }
+]
+```
+
+```json
+[
+  {
+    "text": "asdf asdf asdf asdf asdf asdf asdf asdf",
+    "status": 400,
+    "reason": "low_variety_text",
+    "guess": null,
+    "confidence": null,
+    "ok": true
+  },
+  {
+    "text": "buy now buy now buy now buy now buy now",
+    "status": 400,
+    "reason": "low_variety_text",
+    "guess": null,
+    "confidence": null,
+    "ok": true
+  }
+]
+```
+
+**Did it help, and how do I know:** Yes, for exactly what it was aimed at. Before, all ten repeated-word inputs got a 200 and a verdict, nine of them "ai" and the strongest at 0.99 confidence (`1 1 1 1 1 1 1 1`, 0.9852); after, all ten are refused with a 400 and a log entry that has no scores, in every trial. Criteria 1-5 did not move in any trial, and in particular criterion 2 (all 31 real texts, scores identical to unit 8 to 4 decimals) shows the new check refused no real writing and changed no score. The trade is small and named: any text with fewer than 3 different words is now refused, so a genuine one-line reply like "No no no no no" gets a 400 instead of a label. I accept that, since there is nothing to judge in it.
+
+**What it did not fix:** it only catches low-variety text, and I probed what is left (current code, temporary log): `asdf qwer zxcv uiop hjkl mnbv` (6 different strings) comes back **unsure** at 0.61; `a b c a b c a b c a b c` (3 different words, so it clears the cutoff) comes back **ai at 0.91**; `lorem ipsum dolor sit amet consectetur adipiscing elit` comes back **ai at 0.85**. So junk with a few different words, or junk that looks like words, still gets scored. Catching those needs a different kind of check (a dictionary or a minimum model-confidence rule), which is a bigger change than one fix. Raising the cutoff would catch `a b c a b c` but would start refusing real short messages, and I have no real short messages to measure it on.
