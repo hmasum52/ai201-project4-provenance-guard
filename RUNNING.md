@@ -1,5 +1,57 @@
 # Running Provenance Guard
 
+## Capstone: Path B, local with logs (in a Docker container)
+
+This is the run path for the capstone. The rest of this file is the starter guide from units 7 and 8.
+
+**Build once, from a fresh clone** (needs Docker; installs CPU-only torch, no GPU needed):
+
+```bash
+docker build -t provenance-guard .
+```
+
+**The one command that starts it.** PowerShell, from the repo folder:
+
+```powershell
+docker run --rm -p 5000:5000 -v "${PWD}/logs:/app/logs" -v "$env:USERPROFILE/.cache/huggingface:/root/.cache/huggingface" provenance-guard
+```
+
+bash (macOS, Linux, Git Bash): the same, with `-v "$(pwd)/logs:/app/logs" -v "$HOME/.cache/huggingface:/root/.cache/huggingface"`.
+
+It serves on `http://127.0.0.1:5000`. Two mounts do the work: `logs/` so the audit log (`logs/audit.jsonl`) survives the container, and the Hugging Face cache so the model is not downloaded again. On the very first run with an empty cache, the first request downloads gpt2 (about 550 MB) into that mount.
+
+**Check it is up** (Windows: `curl.exe`, one line; bash: `curl`):
+
+```bash
+curl.exe -X POST http://127.0.0.1:5000/submit -H "Content-Type: application/json" -d "{\"text\": \"The weather was very different from my home. I did not expect the rain to continue for so many days.\", \"creator_id\": \"me\"}"
+curl.exe "http://127.0.0.1:5000/log?limit=1"
+```
+
+The first command returns a `guess`, `label` and both signal scores; the second shows the same request as a log record with `input`, `outcome` and `duration_ms`.
+
+**Smoke check for the capstone extension** (uses a temporary log, not the real one):
+
+```bash
+docker run --rm -v "$env:USERPROFILE/.cache/huggingface:/root/.cache/huggingface" provenance-guard python check_guard.py
+```
+
+It prints `check_guard: all checks passed`. The cache mount matters: the check scores one real text, so without it the container downloads gpt2 first.
+
+**What the environment needs**
+
+| Needs | Value |
+|---|---|
+| Python | 3.11.18, inside the image (`python:3.11-slim`). Outside Docker: 3.11, 3.12 or 3.13, not 3.14 |
+| Dependencies | `requirements.txt` (version ranges), with torch installed first from the CPU index. Versions in the built image: torch 2.15.0+cpu, transformers 4.57.6, flask 3.1.3, flask-limiter 3.12, requests 2.34.2, gunicorn 23.0.0, certifi 2026.11.20 |
+| Model file | `gpt2`, `model.safetensors` 522.7 MB (526 MB in the Hugging Face cache, `~/.cache/huggingface/hub/models--gpt2`) |
+| Image size | 1.29 GB (the model is not in the image; it comes from the mounted cache) |
+| Memory | About 1.0 GB resident once the model is loaded, 1.05 GB at peak (`VmRSS` / `VmHWM` of the service process, read from `/proc` inside the container). Over a 512 MB free host, which is why this is Path B |
+| API key / account | None. Nothing calls a hosted service |
+
+Without Docker, the starter steps below also work (`python -m venv`, `pip install -r requirements.txt`, `python app.py`).
+
+---
+
 Everything about how the starter works.
 
 This is a **web service**. It runs on your machine and you talk to it with
