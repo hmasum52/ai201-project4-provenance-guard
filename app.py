@@ -250,6 +250,16 @@ def submit():
     except ValueError:  # too short to score
         return bad_input("text_too_short", "Text is too short — a few sentences at least.")
     except detector.DetectorUnavailable as exc:
+        # A run that errored still leaves a record (capstone, Milestone 3).
+        audit.log_rejection(
+            creator_id=creator_id,
+            reason="detector_unavailable",
+            event="failed",
+            status="failed",
+            input=shown,
+            outcome="failed",
+            duration_ms=elapsed_ms(),
+        )
         return jsonify({"error": "detector_unavailable", "message": str(exc)}), 503
 
     style_score = stylometry.style_signal(text)

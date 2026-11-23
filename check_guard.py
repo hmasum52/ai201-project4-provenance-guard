@@ -53,5 +53,22 @@ for e in entries:
 assert [e["reason"] for e in entries[:5]] == ["not_enough_text"] * 5
 assert entries[-1]["outcome"] == "scored"
 
+# 4. A run that errors (model unavailable) returns 503 and still leaves a record.
+real_signal = detector.model_signal
+
+
+def unavailable(_text):
+    raise detector.DetectorUnavailable("model not downloaded")
+
+
+detector.model_signal = unavailable
+try:
+    assert submit("one two three four five six", "check_503").status_code == 503
+finally:
+    detector.model_signal = real_signal
+failed = audit.read_entries()[-1]
+assert failed["reason"] == "detector_unavailable" and failed["outcome"] == "failed", failed
+assert failed["duration_ms"] is not None and failed["input"], failed
+
 print("check_guard: all checks passed")
 sys.exit(0)
