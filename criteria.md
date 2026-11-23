@@ -129,3 +129,39 @@ single deterministic check.
      A number you missed stays where it is, gets diagnosed, and gets a fix
      attempted. That's where the points are.
      ───────────────────────────────────────────────────────────────────────── -->
+
+---
+
+# Capstone criteria
+
+Written before building the extension and before any capstone results exist. The extension is the minimum-evidence guard on `POST /submit` (fewer than 5 words from `stylometry.words()` gets a 400 before any signal runs). The five above are the unit 7 criteria and are left untouched.
+
+## 1. Junk is refused, not scored
+
+All 5 junk attacks (MF03 control characters, MF04 punctuation only, MF05 one very long word, MF06 emoji only, MF07 right-to-left script) return 400. The log entry for each shows `reason: not_enough_text` and has no `model_score` or `style_score`. 5 of 5, in each of 3 trials.
+
+**Why this target:** The check is a deterministic word count, so there is no noise to allow for. A single miss is a confident "ai" label at 0.87-0.99 on text that isn't writing.
+
+## 2. Real writing is not refused, and nothing it scored before changes
+
+Over the 20 coverage texts, the 10 plain pieces and EV08 (31 texts), 0 return 400, and each `combined_score` equals the one in `results/run_2026-11-11_0215_after.md` to 4 decimals, in each of 3 trials.
+
+**Why this target:** The guard must not become a new false accusation, and the original system has to still work. Scoring is deterministic, so any difference at all is a regression, not noise.
+
+## 3. The guard runs before the model
+
+On a freshly started service where `GET /health` reports `detector_loaded: false`, all 5 junk inputs return within 500 ms, and `detector_loaded` is still `false` afterwards. 5 of 5, in each of 3 trials (restart between trials).
+
+**Why this target:** Loading the model takes 10+ seconds, so a refusal slower than 500 ms means the guard is not ahead of it. It would also mean junk input can force a model load.
+
+## 4. Every request leaves a complete record, including refusals
+
+Send 20 requests: 10 scored, 5 junk and 5 other bad inputs. Each one leaves exactly one log entry with `timestamp`, `input` (first 200 characters), `outcome` and `duration_ms` all present and non-null, and the log grows by exactly 20. 20 of 20, in each of 3 trials.
+
+**Why this target:** A failure that shows up only as a missing log line cannot be found afterwards. 20 of 20 because a log that is complete most of the time cannot be trusted to explain any one request.
+
+## 5. The boundary sits where I said it does
+
+10 pairs of texts, each pair the same sentence at 4 words and at 5 words. All ten 4-word texts return 400 and all ten 5-word texts return 200. 20 of 20, in each of 3 trials.
+
+**Why this target:** "Fewer than five" is a number I chose and wrote in the README, and this tests it behaves as stated. An off-by-one would silently refuse real writers, or let junk through.
