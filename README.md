@@ -1161,3 +1161,43 @@ Declared before building. I'm adding two of the four:
 - **A load observation.** My "normal" rate is 10 requests per minute, which is a busy minute for the 100 people a day in What It Costs (300 requests a day is about 0.2 a minute on average, so 10 a minute is already about 50 times the average). Ten times that is 100 requests per minute. I will run 1 minute at normal and 2 minutes at 100 per minute, from 40 different `creator_id`s so the per-creator rate limit does not hide the effect, then one creator alone at 100 per minute to see the limiter. I report latency (median, 95th percentile, worst), status codes, peak memory, and whether the log has exactly one entry per request.
 - **Not doing: a second measured improvement.** The first one stays the only change to the system. The leftover junk (`a b c a b c ...`, `lorem ipsum ...`) is written up in What's Still Broken instead.
 - **Not doing: both run paths.** The service holds about 1.0 GB once loaded, so it cannot run on a free 512 MB host, and a hosted deploy needs a paid plan. Path B only, as the arithmetic in RUNNING.md says.
+
+**Latency Breakdown (stretch)**
+
+Run with `python latency_breakdown.py` inside the container (`results/latency_breakdown_2026-11-23_0658.md`). It wraps each stage function the route calls with a timer and sends 30 warm requests through the real `app.py::submit` (10 texts x 3 passes, a fresh `creator_id` each, after one uncounted warm-up request that loads the model). The audit log is a temporary copy of the real one (1,115 lines at the time), so the lookup that reads the log has a realistic file to read and the real log is untouched. It uses Flask's test client, so it leaves out HTTP; the live service adds a few more milliseconds on top of this.
+
+| Stage | Mean ms | Median ms | p95 ms | Share of route |
+|---|---|---|---|---|
+| model signal (gpt2) | 126.70 | 120.70 | 182.42 | 92.0% |
+| verified-human lookup (reads the log) | 8.69 | 8.55 | 11.82 | 6.3% |
+| route overhead (JSON in/out, rest) | 1.69 | 1.68 | 2.00 | 1.2% |
+| style signal | 0.29 | 0.29 | 0.38 | 0.2% |
+| log write | 0.24 | 0.23 | 0.32 | 0.2% |
+| guards (word count, distinct words) | 0.06 | 0.06 | 0.11 | 0.0% |
+| phrase signal | 0.05 | 0.04 | 0.09 | 0.0% |
+| combine | 0.01 | 0.00 | 0.01 | 0.0% |
+| label | 0.00 | 0.00 | 0.00 | 0.0% |
+| **whole route** | **137.73** | **132.19** | **192.70** | 100% |
+
+- **gpt2 is the run.** The model signal is 126.7 ms of a 137.7 ms route, 92%. Everything else together is about 11 ms.
+- **The surprise is the second row.** `audit.is_verified` costs 8.7 ms, more than the style signal, phrase signal, combining, labelling, guards and log write put together. It runs on every `/submit` only to fill in `verified_human` in the response, and it does that by reading the whole audit log. That makes it grow with the log, and I measured how fast: on the same function, 15.4 ms at 1,426 lines and 115.8 ms at 14,260 lines (host timings, 20 calls each, so higher than the container's, but the shape is the point: ten times the log, about seven and a half times the time). At ten times the log this lookup would take roughly 65 to 115 ms on these numbers, close to the model's 127 ms, and it would keep growing past it. The fix would be to look the creator up once at startup or keep verified ids in a small file, which I did not do because it is outside this unit's one change.
+- **The guards I added cost nothing.** The two checks take 0.06 ms together, under 0.1% of the route, so refusing junk early is free next to scoring it (which is the 127 ms it saves).
+- **Cross-check against What It Costs.** The route took 137.7 ms here against 145.6 ms on the live service earlier, which is the same figure within the spread of the runs; the live number also includes HTTP.
+
+**Load Observation (stretch)**
+
+Run with `python load_observation.py` against the container (`results/load_observation_2026-11-23_0202.md`). "Normal" was declared before the run as 10 requests a minute, so ten times is 100 a minute. Requests go out on a fixed schedule whether or not earlier ones have finished, so a slow service cannot slow the load down. The 40-creator phases use 40 different `creator_id`s so that the per-creator limit of 5 a minute does not hide the effect. One uncounted request loaded the model first.
+
+| Phase | Sent | Status codes | Median ms | p95 ms | Worst ms | Completed (200) per min |
+|---|---|---|---|---|---|---|
+| normal (10/min) | 10 | {'200': 10} | 174.4 | 227.9 | 236.8 | 11.1 |
+| 10x (100/min), 40 creators | 200 | {'200': 200} | 174.9 | 238.6 | 327.1 | 100.3 |
+| 10x (100/min), one creator | 100 | {'200': 5, '429': 95} | 164.4 | 196.2 | 202.6 | 5.0 |
+
+- Requests sent: 310. Log entries added: 310.
+- Peak memory of the service (VmHWM): 959 MB before the phases, 1019 MB after.
+
+- **Ten times normal changed almost nothing.** With 40 creators, all 200 requests returned 200 at 100.3 a minute, which is the rate I sent. Median latency was 174.9 ms against 174.4 ms at normal; the 95th percentile went from 227.9 to 238.6 ms; the worst single request went from 236.8 to 327.1 ms. No errors, no timeouts, and the log has exactly one entry per request (310 sent, 310 added, the 429s included).
+- **Why nothing broke: I was nowhere near the limit.** At about 0.14 s a request, 100 a minute keeps the service about 23% busy. If requests ran strictly one at a time it could do about 1 / 0.1377 s = 7.3 a second, about 436 a minute, which is roughly 44 times my "normal". That is arithmetic, not a measurement: I stopped at ten times as declared, so I have not seen where it actually gives way.
+- **The rate limiter did its job.** One creator at 100 a minute got 5 requests through and 95 429s. The 200s were unaffected (median 164.4 ms), and the 429s cost nothing to score because they are rejected before the route runs. This is the same per-creator behaviour, and the same weakness (many `creator_id`s get many allowances), as in Rate Limiting above.
+- **Memory is the one thing that moved.** The service's peak memory went from 959 MB before the phases to 1,019 MB after. I ran this twice: the first run exposed a bug in my 95th-percentile calculation (on 10 samples it gave a value above the worst request), so I fixed it and discarded that run, and in that first run the peak rose to 1,204 MB. So the honest statement is that concurrent requests push the peak up by somewhere between about 60 and 250 MB, not a precise number. A host needs room for roughly 1.0 to 1.2 GB, not 1.0.
