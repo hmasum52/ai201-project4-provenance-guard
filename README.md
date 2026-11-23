@@ -860,3 +860,213 @@ Reading them: the five junk inputs (MF03-MF07) and the two malformed requests we
 *How I measured it:* started the container, sent 10 different attack-set texts (FP02-FP08, EV01-EV03), one `creator_id` each so the rate limiter stayed out of the way, after one cold request had loaded the model. I took the mean of the `duration_ms` field the service itself wrote, and cross-checked it against the client's stopwatch for the same ten requests (mean 0.180 s, the extra being HTTP and the container's network). The service holds about **1.0 GB resident** once loaded (1.05 GB peak, from `VmRSS` and `VmHWM` in `/proc/1/status` inside the container). `docker stats` showed only 365 MiB for the same container, because it leaves out file-cache pages the model weights sit in, so I used the process figure. Measured on one 16 GB Windows laptop with Docker Desktop, on texts of 8-105 words, so longer texts or another machine will differ.
 
 *A hundred people a day:* the arithmetic assumes each person submits 3 pieces. 100 people x 3 submissions = 300 runs; 300 x 0.146 s = **44 s of compute a day**, about $0 in API spend. Even if every one of the 100 hit the daily cap of 50, 100 x 50 = 5,000 runs x 0.146 s = 730 s, about 12 minutes. The compute is trivial; the memory is the real cost: a host has to keep about 1 GB of RAM occupied around the clock for a service that is idle almost all of the time, which is also why this cannot sit on a 512 MB free tier.
+
+**Run Log and Verdicts**
+
+Run with `python run_capstone.py --label before` (full output in `results/capstone_run_2026-11-23_0121_before.md`) against the Docker container from Running It. Targets are exactly as written in `criteria.md`; I did not touch them. Each trial restarts the container first, so the model is unloaded when criterion 3's junk arrives.
+
+| Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict |
+|---|---|---|---|---|---|
+| 1. Junk is refused, not scored | MF03-MF07 all 400, `reason: not_enough_text`, no scores in the log (5 of 5) | 5/5 | 5/5 | 5/5 | MET |
+| 2. Real writing not refused, scores unchanged | 31 texts: 0 refused, `combined_score` equal to unit 8 to 4 decimals | 31/31 | 31/31 | 31/31 | MET |
+| 3. Guard runs before the model | 5 junk inputs each under 500 ms, `detector_loaded` still false after | 5/5, false | 5/5, false | 5/5, false | MET |
+| 4. Every request leaves a complete record | 20 requests, 20 log entries, 4 fields non-null on each | 20/20 | 20/20 | 20/20 | MET |
+| 5. The boundary sits at 5 | 10 pairs: every 4-word text 400, every 5-word text 200 (20 of 20) | 20/20 | 20/20 | 20/20 | MET |
+
+All five met in all three trials, and the three trials are identical in every number except timings. That is expected here and I checked it was a real re-run: nothing in this extension is random (the guard is a word count, and gpt2 scores the same input the same way), the log grew by exactly 243 entries over the run (3 trials x 81 requests), and each trial restarted the container. Meeting all five is not the same as the system being good; see the last paragraph of this section.
+
+**How I decided each verdict.**
+
+1. **MET.** All five junk inputs returned 400 with `not_enough_text`, and the log entry for each has no `model_score` or `style_score` key.
+2. **MET.** 31 texts = the 10 plain pieces and 20 coverage texts from `scenarios.py`, plus EV08. All 31 returned 200 and the `combined_score` recomputed with `scoring.combine_signals` matched the unit 8 value to 4 decimals every time. One wrinkle in my own criterion: it names `run_2026-11-11_0215_after.md`, but EV08 is not in that file (it is in the attack run). I took EV08's baseline from `attack_run_2026-11-11_0213_after.md` (model 0.2452, style 0.532, phrase assumed 0.0, which gives combined 0.3599 and reproduces its recorded confidence 0.6401). The container runs a different torch build (2.15.0+cpu) from the one that produced the unit 8 numbers; it made no difference at 4 decimals.
+3. **MET.** The slowest junk refusal took 30.9 ms and the fastest 11.5 ms, measured by the client including HTTP, over all 15 refusals. `/health` reported `detector_loaded: false` before and after in every trial.
+4. **MET.** Each trial sent 10 scored, 5 junk and 5 other bad requests (missing text, empty text, 20,000 characters, a bare list, missing creator_id). The log grew by exactly 20 and no entry was missing a field.
+5. **MET.** All ten 4-word texts returned 400 and all ten 5-word texts returned 200, in every trial.
+
+**Whose text this is.** The 10 plain pieces and most of the 20 coverage texts are the same ones as unit 8, and Claude wrote them (see Run Log and Verdicts, unit 8). Criteria 2 and 4 use them as test material only; nothing here claims they are my own writing.
+
+**Real output from one trial** (trial 1). Produced by `run_capstone.py::c1`, `c2`, `c3`, `c4` and `c5`, against `app.py::submit`. Log lines are from `logs/audit.jsonl`, written by `audit.py::log_rejection` and `audit.log_decision`.
+
+*Criterion 1: the five junk inputs (`run_capstone.py::c1`) and the log line for one of them:*
+
+```json
+[
+  {
+    "id": "MF03",
+    "status": 400,
+    "reason": "not_enough_text",
+    "has_scores": false,
+    "ok": true
+  },
+  {
+    "id": "MF04",
+    "status": 400,
+    "reason": "not_enough_text",
+    "has_scores": false,
+    "ok": true
+  },
+  {
+    "id": "MF05",
+    "status": 400,
+    "reason": "not_enough_text",
+    "has_scores": false,
+    "ok": true
+  },
+  {
+    "id": "MF06",
+    "status": 400,
+    "reason": "not_enough_text",
+    "has_scores": false,
+    "ok": true
+  },
+  {
+    "id": "MF07",
+    "status": 400,
+    "reason": "not_enough_text",
+    "has_scores": false,
+    "ok": true
+  }
+]
+```
+
+```json
+{"timestamp": "2026-11-23T06:20:56+00:00", "creator_id": "cap_t1_c1_MF04", "event": "rejected", "status": "rejected", "reason": "not_enough_text", "input": "!!! ??? ... ,,, ;;; --- ((( )))", "outcome": "refused", "duration_ms": 0.0}
+```
+
+*Criterion 2: first three texts and EV08, new `combined` against the unit 8 `baseline` (`run_capstone.py::c2`; all 31 matched):*
+
+```json
+[
+  {
+    "i": 0,
+    "status": 200,
+    "combined": 0.584,
+    "baseline": 0.584,
+    "ok": true
+  },
+  {
+    "i": 1,
+    "status": 200,
+    "combined": 0.6657,
+    "baseline": 0.6657,
+    "ok": true
+  },
+  {
+    "i": 2,
+    "status": 200,
+    "combined": 0.6026,
+    "baseline": 0.6026,
+    "ok": true
+  },
+  {
+    "i": 30,
+    "status": 200,
+    "combined": 0.3599,
+    "baseline": 0.3599,
+    "ok": true
+  }
+]
+```
+
+*Criterion 3: junk refused before the model loaded (`run_capstone.py::c3`):*
+
+```json
+{
+  "loaded_before": false,
+  "loaded_after": false,
+  "rows": [
+    {
+      "id": "MF03",
+      "status": 400,
+      "wall_ms": 11.5,
+      "ok": true
+    },
+    {
+      "id": "MF04",
+      "status": 400,
+      "wall_ms": 21.0,
+      "ok": true
+    },
+    {
+      "id": "MF05",
+      "status": 400,
+      "wall_ms": 18.9,
+      "ok": true
+    },
+    {
+      "id": "MF06",
+      "status": 400,
+      "wall_ms": 23.7,
+      "ok": true
+    },
+    {
+      "id": "MF07",
+      "status": 400,
+      "wall_ms": 18.2,
+      "ok": true
+    }
+  ],
+  "ok": true
+}
+```
+
+*Criterion 4: the 20 requests (10 x 200 for the scored ones, then ten 400s), the log growth, and four of the 20 log lines (a scored request, a junk input, a 20,000-character text, a missing text) (`run_capstone.py::c4`):*
+
+```json
+{
+  "requests": 20,
+  "statuses": [
+    200,
+    200,
+    200,
+    200,
+    200,
+    200,
+    200,
+    200,
+    200,
+    200,
+    400,
+    400,
+    400,
+    400,
+    400,
+    400,
+    400,
+    400,
+    400,
+    400
+  ],
+  "log_growth": 20,
+  "missing_fields": [],
+  "ok": true
+}
+```
+
+```json
+{"timestamp": "2026-11-23T06:21:12+00:00", "content_id": "e6d23561-e9d4-45e0-b8a2-2efad56f6a59", "creator_id": "cap_t1_c4_s0", "guess": "unsure", "model_score": 0.6182, "style_score": 0.5328, "combined_score": 0.584, "label": "We can't tell whether a person or an AI wrote this. If it's yours, you can appeal and ask a person to look.", "status": "decided", "phrase_score": 0.0, "input": "I started the new job on Monday. The office is about forty minutes from my flat by bus. My manager showed me around and introduced me to everyone, and I forgot most of the names straight away. The des", "outcome": "scored", "duration_ms": 141.0}
+{"timestamp": "2026-11-23T06:21:14+00:00", "creator_id": "cap_t1_c4_MF04", "event": "rejected", "status": "rejected", "reason": "not_enough_text", "input": "!!! ??? ... ,,, ;;; --- ((( )))", "outcome": "refused", "duration_ms": 0.0}
+{"timestamp": "2026-11-23T06:21:14+00:00", "creator_id": "cap_t1_c4_huge", "event": "rejected", "status": "rejected", "reason": "text_too_long", "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "outcome": "refused", "duration_ms": 0.0}
+{"timestamp": "2026-11-23T06:21:14+00:00", "creator_id": "cap_t1_c4_nt", "event": "rejected", "status": "rejected", "reason": "missing_text", "input": "{\"creator_id\": \"cap_t1_c4_nt\"}", "outcome": "refused", "duration_ms": 0.0}
+```
+
+*Criterion 5: first two of the ten pairs (`run_capstone.py::c5`; all ten matched):*
+
+```json
+[
+  {
+    "five": "The train was late again",
+    "status_4_words": 400,
+    "status_5_words": 200,
+    "ok": true
+  },
+  {
+    "five": "My brother lives in Leeds",
+    "status_4_words": 400,
+    "status_5_words": 200,
+    "ok": true
+  }
+]
+```
+
+**Were my targets too easy?** Yes, and I checked rather than guessed. Criterion 1 only tests the five junk inputs the extension was built for, and all five have fewer than five words. After the run I sent a few inputs the guard counts as enough text: `asdf asdf asdf asdf asdf asdf asdf asdf` (8 words) came back labelled **ai at 0.97 confidence**, `buy now buy now buy now buy now buy now` at 0.97, and `the the the the the the` at 0.76, all with a style score of exactly 1.0. The guard counts words, not whether they are real writing, so five-word junk walks straight through, and criterion 5 only proves the boundary is at five, not that five is enough. **The one I would tighten is criterion 1**: test a set of at least 10 junk inputs of 5 or more words (repeated tokens, keyboard mashing, numbers only) and require 10 of 10 to be refused. That would fail today.
