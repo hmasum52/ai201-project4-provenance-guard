@@ -225,6 +225,12 @@ def submit():
         return bad_input("missing_creator_id", "Send a creator_id.")
     if len(text) > MAX_TEXT_CHARS:
         return bad_input("text_too_long", f"Text is over {MAX_TEXT_CHARS} characters.")
+    # Capstone extension: refuse text with nothing to read, before the model loads.
+    if len(stylometry.words(text)) < config.MIN_WORDS:
+        return bad_input(
+            "not_enough_text",
+            f"Send at least {config.MIN_WORDS} words of English text to check.",
+        )
 
     try:
         model_score = detector.model_signal(text)

@@ -46,6 +46,12 @@ DETECTOR_MODEL = os.getenv("AI201_DETECTOR_MODEL", "gpt2")
 # 300 words, which is enough for the signal to mean something.
 DETECTOR_MAX_TOKENS = 400
 
+# Capstone: /submit refuses text with fewer than this many words (counted by
+# stylometry.words(), the same tokenizer the style signal uses) before any
+# signal runs. Below it there is nothing to read, and style_signal returns a
+# confident 1.0 ("AI") on an empty word list.
+MIN_WORDS = 5
+
 
 # ─── Scoring (Milestone 4) ───────────────────────────────────────────────────
 # How much each signal counts toward the combined score.
