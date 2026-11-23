@@ -34,6 +34,13 @@ BASELINE_RUN = config.RESULTS_DIR / "run_2026-11-11_0215_after.md"
 BASELINE_ATTACKS = config.RESULTS_DIR / "attack_run_2026-11-11_0213_after.md"
 
 JUNK = ["MF03", "MF04", "MF05", "MF06", "MF07"]
+# Criterion 6: junk of 5+ words that repeats one or two words.
+JUNK2 = [
+    "asdf asdf asdf asdf asdf asdf asdf asdf", "buy now buy now buy now buy now buy now",
+    "the the the the the the", "lol lol lol lol lol lol lol lol lol lol", "ok ok ok ok ok ok",
+    "test test test test test test", "a b a b a b a b", "1 1 1 1 1 1 1 1",
+    "12345 12345 12345 12345 12345", "no no no no no no no no",
+]
 PAIRS = [
     "The train was late again", "My brother lives in Leeds", "She bought bread and cheese",
     "They walked home in silence", "The kettle broke last week", "He forgot his keys again",
@@ -91,6 +98,19 @@ def c1(n):
               and "model_score" not in entry and "style_score" not in entry)
         rows.append({"id": attack_id, "status": r.status_code, "reason": entry.get("reason"),
                      "has_scores": "model_score" in entry or "style_score" in entry, "ok": ok})
+    return rows
+
+
+def c6(n):
+    rows = []
+    for i, text in enumerate(JUNK2):
+        r, _ = post({"text": text, "creator_id": f"cap_t{n}_c6_{i}"})
+        entry = requests.get(f"{URL}/log?limit=1", timeout=10).json()["entries"][0]
+        d = r.json() if r.status_code == 200 else {}
+        ok = (r.status_code == 400 and entry.get("reason") == "low_variety_text"
+              and "model_score" not in entry and "style_score" not in entry)
+        rows.append({"text": text, "status": r.status_code, "reason": entry.get("reason"),
+                     "guess": d.get("guess"), "confidence": d.get("confidence"), "ok": ok})
     return rows
 
 
@@ -152,7 +172,24 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--label", default="")
     ap.add_argument("--trials", type=int, default=3)
+    ap.add_argument("--only6", action="store_true", help="run just criterion 6 (no restart)")
     args = ap.parse_args()
+
+    if args.only6:
+        stamp = dt.datetime.now().strftime("%Y-%m-%d_%H%M")
+        path = config.RESULTS_DIR / f"capstone_run_{stamp}_{args.label or 'c6'}_c6only.md"
+        out = ["# Capstone criterion 6 only" + (f" - {args.label}" if args.label else ""), "",
+               "- Produced by: `run_capstone.py::c6` against the container", "",
+               "| Criterion | " + " | ".join(f"Run {i}" for i in range(1, args.trials + 1)) + " |",
+               "|---|" + "---|" * args.trials]
+        trials = [c6(n) for n in range(1, args.trials + 1)]
+        out.append("| 6 | " + " | ".join(f'{sum(x["ok"] for x in t)}/10 {"ok" if all(x["ok"] for x in t) else "FAIL"}' for t in trials) + " |")
+        for n, t in enumerate(trials, 1):
+            out += ["", f"### Trial {n} - c6", "", "```json", json.dumps(t, indent=1, ensure_ascii=False), "```"]
+        path.write_text("\n".join(out), encoding="utf-8")
+        print("\n".join(out[:8]))
+        print("wrote", path.relative_to(config.ROOT))
+        return
 
     own = baseline_json_block(BASELINE_RUN, "own writing")
     cov = baseline_json_block(BASELINE_RUN, "coverage")
@@ -164,15 +201,16 @@ def main():
     trials = []
     for n in range(1, args.trials + 1):
         res = {"c3": c3(n)}          # first: needs a freshly started container
-        res["c1"], res["c2"], res["c4"], res["c5"] = c1(n), c2(n, base), c4(n), c5(n)
+        res["c1"], res["c2"], res["c4"], res["c5"], res["c6"] = c1(n), c2(n, base), c4(n), c5(n), c6(n)
         passed = {
             1: all(x["ok"] for x in res["c1"]), 2: all(x["ok"] for x in res["c2"]),
             3: res["c3"]["ok"], 4: res["c4"]["ok"], 5: all(x["ok"] for x in res["c5"]),
+            6: all(x["ok"] for x in res["c6"]),
         }
         counts = {
             1: f'{sum(x["ok"] for x in res["c1"])}/5', 2: f'{sum(x["ok"] for x in res["c2"])}/31',
             3: f'{sum(x["ok"] for x in res["c3"]["rows"])}/5', 4: f'{res["c4"]["log_growth"]}/20 logged',
-            5: f'{sum(x["ok"] for x in res["c5"]) * 2}/20',
+            5: f'{sum(x["ok"] for x in res["c5"]) * 2}/20', 6: f'{sum(x["ok"] for x in res["c6"])}/10',
         }
         trials.append({"res": res, "passed": passed, "counts": counts})
         print(f"trial {n}:", {k: f"{counts[k]} {'ok' if passed[k] else 'FAIL'}" for k in passed})
@@ -184,11 +222,11 @@ def main():
              f"- {args.trials} trials per criterion, {dt.datetime.now().strftime('%Y-%m-%d %H:%M')}", "",
              "| Criterion | " + " | ".join(f"Run {i}" for i in range(1, args.trials + 1)) + " |",
              "|---|" + "---|" * args.trials]
-    for k in range(1, 6):
+    for k in range(1, 7):
         lines.append(f"| {k} | " + " | ".join(f'{t["counts"][k]} {"ok" if t["passed"][k] else "FAIL"}' for t in trials) + " |")
     lines += ["", "---", "", "## What actually came back", ""]
     for n, t in enumerate(trials, 1):
-        for k in ("c1", "c2", "c3", "c4", "c5"):
+        for k in ("c1", "c2", "c3", "c4", "c5", "c6"):
             lines += [f"### Trial {n} - {k}", "", "```json", json.dumps(t["res"][k], indent=1), "```", ""]
     path.write_text("\n".join(lines), encoding="utf-8")
     print("wrote", path.relative_to(config.ROOT))

@@ -165,3 +165,13 @@ Send 20 requests: 10 scored, 5 junk and 5 other bad inputs. Each one leaves exac
 10 pairs of texts, each pair the same sentence at 4 words and at 5 words. All ten 4-word texts return 400 and all ten 5-word texts return 200. 20 of 20, in each of 3 trials.
 
 **Why this target:** "Fewer than five" is a number I chose and wrote in the README, and this tests it behaves as stated. An off-by-one would silently refuse real writers, or let junk through.
+
+---
+
+## 6. Repeated-word junk is refused too (added after the first results)
+
+This is not a revision of criteria 1-5. They are unchanged above, all five were MET in `results/capstone_run_2026-11-23_0121_before.md`, and this one is added because that run exposed a gap they do not cover: after the first results I found that `asdf asdf asdf asdf asdf asdf asdf asdf` passes the 5-word guard and comes back labelled "ai" at 0.97 confidence.
+
+10 junk inputs of 5 or more words that repeat one or two words (`asdf` x8, `buy now` x5, `the` x6, `lol` x10, `ok` x6, `test` x6, `a b` x4, `1` x8, `12345` x5, `no` x8) are each sent to `/submit` and each must return 400. The log entry for each shows `reason: low_variety_text` and has no `model_score` or `style_score`. 10 of 10, in each of 3 trials. Written before the fix and before this criterion has ever been run.
+
+**Why this target:** The same reason as criterion 1: a refused input is not an accusation, and a confident "ai" label on text that is not writing is the worst thing this guard exists to prevent. 10 of 10 because the check is a deterministic count of distinct words, so there is no noise to allow for. Out of scope on purpose: junk made of many different random strings (`asdf qwer zxcv uiop hjkl`) has varied words and needs a dictionary to catch, which is a different change.
